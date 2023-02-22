@@ -37,8 +37,7 @@ def generate_data_loaders(params, train_split: float = 0.8, normalize_function=n
         }
     :return: training dataloader, validation dataloader
     """
-    intensity_data_table = pd.read_pickle(r'C:\Users\sadip\PycharmProjects\tfo_inverse_modelling\data\intensity\test_data.pkl')
-    # intensity_data_table = pd.read_pickle(r'/data/intensity/test_data.pkl')
+    intensity_data_table = pd.read_pickle(r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl')
 
     # Normalize
     if normalize_function is not None:
