@@ -5,7 +5,7 @@ from typing import List, Tuple
 import torch.optim as optim
 import torch
 from torch.utils.data import DataLoader
-
+import pandas as pd
 
 def create_perceptron_model(node_counts: List[int] = [6, 6, 3, 2, 1]):
     """Create a Multi-Layer Fully-Connected Perceptron based on the array node counts. The first element is the
@@ -100,7 +100,8 @@ if __name__ == '__main__':
     params = {
         'batch_size': 500, 'shuffle': False, 'num_workers': 2
     }
-    train, val = generate_data_loaders(params)
+    data = pd.read_pickle(r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl')
+    train, val = generate_data_loaders(data, params, ['SDD', 'Uterus Thickness', 'Maternal Wall Thickness', 'Maternal Mu_a', 'Fetal Mu_a', 'Wave Int'], ['Intensity'])
 
     model = create_perceptron_model()
     print(model)
@@ -108,4 +109,4 @@ if __name__ == '__main__':
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.0005, momentum=0.9)
 
-    train_model(model, optimizer, criterion, train, val, verbose=True, epochs=20)
+    train_model(model, optimizer, criterion, train, val, epochs=2)

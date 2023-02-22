@@ -3,7 +3,6 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from typing import Dict, List, Tuple
 from torch import Tensor
-from inverse_modelling_tfo.data.normalize import normalize_zero_one
 
 
 class IntensityDataset(Dataset):
@@ -14,13 +13,12 @@ class IntensityDataset(Dataset):
         self.x_columns = [table.columns.get_loc(x) for x in x_columns]
         self.y_columns = [table.columns.get_loc(x) for x in y_columns]
 
-
     def __len__(self):
         return len(self.row_IDs)
 
     def __getitem__(self, item):
         x = Tensor(self.table.iloc[item, self.x_columns])
-        y = Tensor([self.table.iloc[item, self.y_columns]])
+        y = Tensor(self.table.iloc[item, self.y_columns])
         return x, y
 
 
@@ -48,8 +46,10 @@ def generate_data_loaders(intensity_data_table: pd.DataFrame, params: Dict, x_co
         len(randomized_array) * train_split):]
 
     # Create the datasets
-    training_dataset = IntensityDataset(intensity_data_table, training_indices, x_columns, y_columns)
-    validation_dataset = IntensityDataset(intensity_data_table, validation_indices, x_columns, y_columns)
+    training_dataset = IntensityDataset(
+        intensity_data_table, training_indices, x_columns, y_columns)
+    validation_dataset = IntensityDataset(
+        intensity_data_table, validation_indices, x_columns, y_columns)
 
     # Create the data loaders
     train_loader = DataLoader(training_dataset, **params)
@@ -67,7 +67,8 @@ if __name__ == '__main__':
     }
     data = pd.read_pickle(
         r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl')
-    train, val = generate_data_loaders(data, params1, ['SDD', 'Uterus Thickness', 'Maternal Wall Thickness', 'Maternal Mu_a', 'Fetal Mu_a', 'Wave Int'], ['Intensity'])
+    train, val = generate_data_loaders(data, params1, [
+                                       'SDD', 'Uterus Thickness', 'Maternal Wall Thickness', 'Maternal Mu_a', 'Fetal Mu_a', 'Wave Int'], ['Intensity'])
     for x, y in train:
         print(x, y)
         break
