@@ -17,7 +17,7 @@ def interpolate_exp_chunk(data: DataFrame, weights : Tuple[float, float] = (1, -
     """
     X = np.ones((len(data), 3))  # One column for SDD and one for the bias
     X[:, 0] = data['SDD'].to_numpy()
-    X[:, 1] = np.square(data['SDD'].to_numpy())
+    X[:, 1] = np.sqrt(data['SDD'].to_numpy())
     Y = np.log(data['Intensity'].to_numpy()).reshape(-1, 1)
     W = np.diag(np.logspace(weights[0], weights[1], num=len(Y)))   # Define the weight
     beta_hat = np.linalg.inv(X.T @ W @ X) @ X.T @ W @ Y # Solve
