@@ -11,9 +11,9 @@ import os
 raw_data_path = Path('/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps')
 mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
 mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
-output_file = 'intensity_averaged_sim_data.pkl'
-fetal_mu_a = np.arange(0.05, 0.10, 0.005)
-maternal_mu_a = np.arange(0.005, 0.010, 0.0005)
+output_file = 'intensity_summed_sim_data.pkl'
+fetal_mu_a = np.arange(0.05, 0.10, 0.001)
+maternal_mu_a = np.arange(0.005, 0.010, 0.0001)
 
 
 
@@ -45,18 +45,32 @@ def intensity_from_raw(file_path: Path, mu_map: Dict[int, float], unitinmm: floa
             available_layers.append(f'L{layer} ppath')
 
     # Get Intensity
+    # This creates the intensity of each photon individually
     simulation_data['Intensity'] = simulation_data[available_layers].prod(
         axis=1)
 
-    # TODO: Change to sum later?
-    # Mean(instead of sum) per detector
+    # TODO: Use mean? or sum? per detector
+    # This line either takes the mean or the sum of all photons hitting a certain detector
+    
+    # SUM Path
     simulation_data = simulation_data.groupby(['SDD'])['Intensity'].sum()
-
-    # Rename and create df
     simulation_data.name = "Intensity"
     simulation_data = simulation_data.to_frame().reset_index()
-
     return simulation_data
+    
+    # MEAN PATH with Variance Added
+    # simulation_data_mean = simulation_data.groupby(['SDD'])['Intensity'].mean()  
+    # simulation_data_variance = simulation_data.groupby(['SDD'])['Intensity'].var()  
+
+    # # Rename and create df
+    # simulation_data_mean.name = "Intensity"
+    # simulation_data_variance.name = "Intensity Variance"
+    
+    # # Merge into one 
+    # simulation_data_merged = pd.concat([simulation_data_mean, simulation_data_variance], axis=1)
+    # simulation_data_merged = simulation_data_merged.reset_index()
+
+    # return simulation_data_merged
 
 
 # Get all the simulation files
