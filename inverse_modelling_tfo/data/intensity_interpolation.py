@@ -71,8 +71,7 @@ def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (
     Returns:
         DataFrame: Returns a dataframe of fitting parameters for each combination of [wavelength, degrees of freedom] combination.
     """
-    non_intensity_column_names = data.columns.copy()
-    non_intensity_column_names.drop('Intensity')
+    model_parameter_columns = data.columns.copy().drop('Intensity').drop('SDD')
     
     # Do a test run and get the number of fitting parameters
     fit_param_temp = interpolate_exp_chunk(data.iloc[0: sdd_chunk_size, :], weights, return_beta=True)
@@ -84,10 +83,9 @@ def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (
     for i in range(len(data)//sdd_chunk_size):
         data_chunk = data.iloc[sdd_chunk_size*i: sdd_chunk_size * (i + 1), :]
         beta = interpolate_exp_chunk(data_chunk, weights, return_beta=True)
-        fitting_param_table.append(np.hstack([data_chunk.iloc[0][non_intensity_column_names].to_numpy(), beta.flatten()]))
+        fitting_param_table.append(np.hstack([data_chunk.iloc[0][model_parameter_columns].to_numpy(), beta.flatten()]))
         
-    fitting_param_table = DataFrame(data=fitting_param_table, columns=[*non_intensity_column_names, *fitting_param_col_names])
-    fitting_param_table = fitting_param_table.drop(labels='SDD', axis=1)    # Drop the SDD column, since the data is fitted at all SDD
+    fitting_param_table = DataFrame(data=fitting_param_table, columns=[*model_parameter_columns, *fitting_param_col_names])
     return fitting_param_table
 
 
