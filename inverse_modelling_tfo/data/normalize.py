@@ -15,6 +15,8 @@ def normalize_zero_one(data: DataFrame):
     data['SDD'] = data['SDD'] / 20
     # data['Intensity'] = data['Intensity'] / 1e8  # Number of Photons
     data['Intensity'] = log10(data['Intensity']) / 8  # Number of Photons
+    if 'Interpolated Intensity' in data.columns:
+        data['Interpolated Intensity'] = log10(data['Interpolated Intensity']) / 8.
     data['Uterus Thickness'] = data['Uterus Thickness'] / 8.
     data['Maternal Wall Thickness'] = data['Maternal Wall Thickness'] / 40.
     data['Wave Int'] = data['Wave Int'] - 1.0
@@ -30,6 +32,8 @@ def normalize_zero_mean(data: DataFrame):
     data['SDD'] = data['SDD'] / 20 - 0.5
     # data['Intensity'] = data['Intensity'] / 1e8  # Number of Photons
     data['Intensity'] = log10(data['Intensity']) / 8  # Number of Photons
+    if 'Interpolated Intensity' in data.columns:
+        data['Interpolated Intensity'] = log10(data['Interpolated Intensity']) / 8.
     data['Uterus Thickness'] = data['Uterus Thickness'] / 8. - 0.5
     data['Maternal Wall Thickness'] = data['Maternal Wall Thickness'] / 40. - 0.5
     data['Wave Int'] = data['Wave Int'] - 1.0 - 0.5
