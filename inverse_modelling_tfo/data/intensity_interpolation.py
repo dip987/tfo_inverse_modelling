@@ -95,5 +95,5 @@ if __name__ == "__main__":
     loaded_data = read_pickle(
         r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl')
     # filtered_data = interpolate_exp(loaded_data, weights=[1, -10])
-    beta_table = get_interpolate_fit_params(loaded_data, weights=[1, -10])git rm --cached <filename>
+    beta_table = get_interpolate_fit_params(loaded_data, weights=[1, -10])
     print("HALT")
