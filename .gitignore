@@ -87,3 +87,4 @@ target/
 
 # Mypy cache
 .mypy_cache/
+inverse_modelling_tfo/tools/intensity_summed_sim_data.pkl
