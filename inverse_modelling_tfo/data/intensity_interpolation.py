@@ -33,7 +33,7 @@ def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float], return_
         return np.exp(y_hat)
 
 
-def interpolate_exp(data: DataFrame, weights: Tuple[float, float] = (1.0, -2), sdd_chunk_size: int = 20) -> DataFrame:
+def interpolate_exp(data: DataFrame, weights: Tuple[float, float] = (1.0, -3), sdd_chunk_size: int = 20) -> DataFrame:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised version of the Intensity. The interpolation
     uses a weighted version of linear regression. (More info here : https://en.wikipedia.org/wiki/Weighted_least_squares)
 
