@@ -7,11 +7,14 @@ from pandas import read_pickle
 def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float], return_beta: bool = False) -> np.array:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised version of the Intensity. The interpolation
     uses a weighted version of linear regression. (More info here : https://en.wikipedia.org/wiki/Weighted_least_squares)
+    
+    Fitting equation used
+        Intensity = beta0 + beta1 * SDD + beta2 * sq_root(SDD) + beta3 * cubic_root(SDD)
 
     Args:
-        data (DataFrame): A chunk of the data. The whole chunk will be used for interpolation
-        weights (Tuple[float, float]): Weights used during interpolation. Supply the weight of the first and last element. Logarithmically
-        picks the middle weights.
+        data (DataFrame): A chunk of intensity data as Dataframe. The columns should include 'SDD' and 'Intensity'
+        weights (Tuple[float, float]): Weights used during interpolation. Supply the weight of the first and last element as powers of 10. 
+        Logarithmically picks the weights for the detectors in between.
         return_beta (bool) : Return the fitting parameters instead of the interpolated data. Defaults to False
 
     Returns:
@@ -60,7 +63,8 @@ def interpolate_exp(data: DataFrame, weights: Tuple[float, float] = (1.0, -3), s
 
 def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (1.0, -2), sdd_chunk_size: int = 20) -> DataFrame:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised version of the Intensity. The interpolation
-    uses a weighted version of linear regression. Get a table of fitting parameters for each [wavelength, degrees of freedom] combination.
+    uses a weighted version of linear regression. 
+    YOu can also return a table of fitting parameters for each [wavelength, degrees of freedom] combination.
 
     Args:
         data (DataFrame): Simulation data loaded in an orderly fashion. (The code expects all 20 SDDs to be in a sequence)

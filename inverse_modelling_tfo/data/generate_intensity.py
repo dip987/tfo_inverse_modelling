@@ -61,6 +61,8 @@ def intensity_from_raw(file_path: Path, mu_map: Dict[int, float], unitinmm: floa
 
     The mu_map should contain {layer number(int) : Mu(float) in mm-1}.
     The output is a dataframe with two columns SDD and Intensity
+    The intensity is summed across all detectors in a single SDD(Each detector ring). When comparing between different setups,
+    make sure to divide the intensity by the number of detectors. 
     """
     simulation_data = pd.read_pickle(file_path)
 
