@@ -4,12 +4,12 @@ from pandas import DataFrame
 from pandas import read_pickle
 
 
-def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float], return_beta: bool = False) -> np.array:
+def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float], return_alpha: bool = False) -> np.array:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised version of the Intensity. The interpolation
     uses a weighted version of linear regression. (More info here : https://en.wikipedia.org/wiki/Weighted_least_squares)
     
     Fitting equation used
-        Intensity = beta0 + beta1 * SDD + beta2 * sq_root(SDD) + beta3 * cubic_root(SDD)
+        log(Intensity) = alpha0 + alpha1 * SDD + alpha2 * sq_root(SDD) + alpha3 * cubic_root(SDD)
 
     Args:
         data (DataFrame): A chunk of intensity data as Dataframe. The columns should include 'SDD' and 'Intensity'
@@ -21,18 +21,18 @@ def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float], return_
         np.array: returns the interpolated data as a (n x 1) numpy array. (Or if return_beta, the fitting parameters)
     """
     X = np.ones((len(data), 4))  # One column for SDD and one for the bias
-    X[:, 0] = data['SDD'].to_numpy()
-    X[:, 1] = np.sqrt(data['SDD'].to_numpy())
-    X[:, 2] = np.power(data['SDD'].to_numpy(), 1/3)
+    X[:, 1] = data['SDD'].to_numpy()
+    X[:, 2] = np.sqrt(data['SDD'].to_numpy())
+    X[:, 3] = np.power(data['SDD'].to_numpy(), 1/3)
     # TODO : Figure out the best interpolation
     Y = np.log(data['Intensity'].to_numpy()).reshape(-1, 1)
     # Define the weight
     W = np.diag(np.logspace(weights[0], weights[1], num=len(Y)))
-    beta_hat = np.linalg.inv(X.T @ W @ X) @ X.T @ W @ Y  # Solve
-    if return_beta:
-        return beta_hat
+    alpha_hat = np.linalg.inv(X.T @ W @ X) @ X.T @ W @ Y  # Solve
+    if return_alpha:
+        return alpha_hat
     else:
-        y_hat = X @ beta_hat
+        y_hat = X @ alpha_hat
         return np.exp(y_hat)
 
 
@@ -63,8 +63,11 @@ def interpolate_exp(data: DataFrame, weights: Tuple[float, float] = (1.0, -3), s
 
 def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (1.0, -2), sdd_chunk_size: int = 20) -> DataFrame:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised version of the Intensity. The interpolation
-    uses a weighted version of linear regression. 
-    YOu can also return a table of fitting parameters for each [wavelength, degrees of freedom] combination.
+    uses a weighted version of linear regression.
+    
+    This function returns the fitting parameters for the interpolation as alpha0, alpha1, alpha2 and alpha3 from the equation below
+        log(Intensity) = alpha0 + alpha1 * SDD + alpha2 * sq_root(SDD) + alpha3 * cubic_root(SDD)
+    
 
     Args:
         data (DataFrame): Simulation data loaded in an orderly fashion. (The code expects all 20 SDDs to be in a sequence)
@@ -78,7 +81,7 @@ def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (
     model_parameter_columns = data.columns.copy().drop('Intensity').drop('SDD')
     
     # Do a test run and get the number of fitting parameters
-    fit_param_temp = interpolate_exp_chunk(data.iloc[0: sdd_chunk_size, :], weights, return_beta=True)
+    fit_param_temp = interpolate_exp_chunk(data.iloc[0: sdd_chunk_size, :], weights, return_alpha=True)
     fit_param_count = len(fit_param_temp)
     fitting_param_col_names = [f'alpha{x}' for x in range(fit_param_count)]
     
@@ -86,7 +89,7 @@ def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (
     
     for i in range(len(data)//sdd_chunk_size):
         data_chunk = data.iloc[sdd_chunk_size*i: sdd_chunk_size * (i + 1), :]
-        beta = interpolate_exp_chunk(data_chunk, weights, return_beta=True)
+        beta = interpolate_exp_chunk(data_chunk, weights, return_alpha=True)
         fitting_param_table.append(np.hstack([data_chunk.iloc[0][model_parameter_columns].to_numpy(), beta.flatten()]))
         
     fitting_param_table = DataFrame(data=fitting_param_table, columns=[*model_parameter_columns, *fitting_param_col_names])
