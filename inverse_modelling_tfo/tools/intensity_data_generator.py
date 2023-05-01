@@ -57,8 +57,8 @@ if __name__ == '__main__':
     raw_data_path = Path('/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
     mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
     mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
-    fetal_mu_a = np.arange(0.05, 0.10, 0.001)
-    maternal_mu_a = np.arange(0.005, 0.010, 0.0001)
+    fetal_mu_a = np.arange(0.05, 0.10, 0.01)
+    maternal_mu_a = np.arange(0.005, 0.010, 0.001)
     output_file = os.getcwd() + os.sep + 'intensity_summed_sim_data_equidistance_detector.pkl'
     
     # Get all the simulation files

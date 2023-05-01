@@ -106,7 +106,7 @@ def _generate_weights_log(weight_range: Tuple[float, float], x_range: Tuple[floa
     slope = (weight_range[1] - weight_range[0])/(x_range[1] - x_range[0])
     intercept = weight_range[0] - slope * x_range[0]
     weight_y = [slope * x + intercept for x in detector_x]
-    weight_y_log = [10 ^ x for x in weight_y]
+    weight_y_log = [10 ** x for x in weight_y]
     return weight_y_log
 
 
