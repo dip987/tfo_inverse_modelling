@@ -1,14 +1,15 @@
 """
-This file generates intensity data using RAW type simulation outputs. We can change the absorption co-eff and generate different sets of data. This is meant to train a forward neural network.
+This file generates intensity data using RAW type simulation outputs. We can change the absorption 
+co-eff and generate different sets of data. This is meant to train a forward neural network.
 """
 from typing import Dict
-import numpy as np
 from pathlib import Path
 from glob import glob
-import pandas as pd
 import os
-
-
+import pandas as pd
+import numpy as np
+from inverse_modelling_tfo.tools.name_decoder import decode_extended_filename
+from inverse_modelling_tfo.tools.dataframe_handling import generate_sdd_column_
 
 
 # Generate Intensity Values
@@ -25,11 +26,7 @@ def intensity_from_raw(file_path: Path, mu_map: Dict[int, float], unitinmm: floa
     simulation_data = pd.read_pickle(file_path)
 
     # Convert X,Y, Z co-ordinates to SDD
-    varying_coordinate = 'X' if len(simulation_data['X'].unique()) > 1 else 'Y'
-    fixed_coordinate = 'X' if varying_coordinate == 'Y' else 'Y'
-    source_coordinate = simulation_data[fixed_coordinate][0]
-    simulation_data['SDD'] = (
-        simulation_data[varying_coordinate] - source_coordinate).astype(np.int32)  # in mm
+    generate_sdd_column_(simulation_data)
     simulation_data.drop(['X', 'Y', 'Z'], axis=1, inplace=True)
 
     available_layers = []
@@ -45,9 +42,7 @@ def intensity_from_raw(file_path: Path, mu_map: Dict[int, float], unitinmm: floa
     simulation_data['Intensity'] = simulation_data[available_layers].prod(
         axis=1)
 
-    # This line either takes the mean or the sum of all photons hitting a certain detector
-    
-    # SUM Path
+    # This line either takes the sum of all photons hitting a certain detector
     simulation_data = simulation_data.groupby(['SDD'])['Intensity'].sum()
     simulation_data.name = "Intensity"
     simulation_data = simulation_data.to_frame().reset_index()
@@ -57,9 +52,10 @@ if __name__ == '__main__':
     raw_data_path = Path('/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
     mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
     mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
-    fetal_mu_a = np.arange(0.05, 0.10, 0.01)
-    maternal_mu_a = np.arange(0.005, 0.010, 0.001)
+    fetal_mu_a = np.arange(0.05, 0.30, 0.04)
+    maternal_mu_a = np.arange(0.005, 0.050, 0.004)
     output_file = os.getcwd() + os.sep + 'intensity_summed_sim_data_equidistance_detector.pkl'
+    print(f'saving as {output_file}')
     
     # Get all the simulation files
     all_files = glob(str(raw_data_path.joinpath('*.pkl')))
@@ -69,27 +65,22 @@ if __name__ == '__main__':
     # Note: For these RAW files, the saturation and the state parts of the name do not mean anything
     for file in all_files:
         # Get simulation settings using file name
-        base_file_names = file.split(os.sep)[-1]
-        base_file_names_without_extension = base_file_names[:-4]
-        name_components = base_file_names_without_extension.split('_')
-        uterus_thickness = int(name_components[-1])
-        maternal_wall_thickness = int(name_components[-3])
-        wave_int = int(name_components[3])
-
+        maternal_wall_thickness, uterus_thickness, wave_int = decode_extended_filename(file)
+        
         # Get intensity
-        mu_map = mu_map_base1 if wave_int == 1 else mu_map_base2
+        mu_map_active = mu_map_base1 if wave_int == 1 else mu_map_base2
         # Try all possible combos of maternal and fetal mu_a for each file
         for f_mu_a in fetal_mu_a:
             for m_mu_a in maternal_mu_a:
-                mu_map[1] = m_mu_a  # Change maternal mu a
-                mu_map[4] = f_mu_a  # Change fetal mu a
-                intensity_df = intensity_from_raw(file, mu_map)
+                mu_map_active[1] = m_mu_a  # Change maternal mu a
+                mu_map_active[4] = f_mu_a  # Change fetal mu a
+                intensity_df = intensity_from_raw(file, mu_map_active)
                 num_rows = len(intensity_df)
                 intensity_df['Wave Int'] = wave_int * np.ones((num_rows, 1))
                 intensity_df['Uterus Thickness'] = uterus_thickness * np.ones((num_rows, 1))
                 intensity_df['Maternal Wall Thickness'] = maternal_wall_thickness * np.ones((num_rows, 1))
-                intensity_df['Maternal Mu_a'] = mu_map[1] * np.ones((num_rows, 1))
-                intensity_df['Fetal Mu_a'] = mu_map[4] * np.ones((num_rows, 1))
+                intensity_df['Maternal Mu_a'] = mu_map_active[1] * np.ones((num_rows, 1))
+                intensity_df['Fetal Mu_a'] = mu_map_active[4] * np.ones((num_rows, 1))
 
                 # Add new data to the combined DF
                 if combined_df is None:
