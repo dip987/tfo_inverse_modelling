@@ -1,3 +1,6 @@
+"""
+Deals with decoding filenames to generate tissue simulation model parameters.
+"""
 from os import sep
 from typing import Tuple
 

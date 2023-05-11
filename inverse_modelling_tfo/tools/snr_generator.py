@@ -11,32 +11,39 @@ import pandas as pd
 from inverse_modelling_tfo.tools.name_decoder import decode_extended_filename
 from inverse_modelling_tfo.tools.dataframe_handling import generate_sdd_column_
 
-def get_photon_count_snr(file_path: Path):
-    """
-    Convert a Pickle containing raw photon partial paths into detector intensity for any given set of absorption co-efficients.
-    Uses Beer-Lambert law directly on each detected photon and adds up the intensities.
 
-    The file is stored in the currect working directory with the name <CWD/output_file> 
+def get_photon_count_snr(file_path: Path, fetal_layer_number: int = 4):
+    """Get photon count on each detector. Caluclates both Total and Fetal Count.
+    Creates a DataFrame with 3 columns: SDD, SNR, Fetal SNR
 
-    The mu_map should contain {layer number(int) : Mu(float) in mm-1}.
-    The output is a dataframe with two columns SDD and Intensity
+    Args:
+        file_path (Path): Simulation Raw Data 
+        fetal_layer_number (int, optional): Fetal Layer between 1 to n. Defaults to 4.
     """
     simulation_data = read_pickle(file_path)
 
     # Convert X,Y, Z co-ordinates to SDD
     generate_sdd_column_(simulation_data)
-    simulation_data = simulation_data['SDD']    # Only keep SDD
+    simulation_data["isFetal"] = simulation_data[f'L{fetal_layer_number} ppath'] > 0.0
 
-    # SUM Path
-    simulation_data = simulation_data.value_counts()
-    simulation_data.name = "SNR"
-    simulation_data = simulation_data.to_frame().reset_index()
-    simulation_data.rename(columns={'index' : 'SDD'}, inplace=True)
-    return simulation_data
+    
+    total_count = simulation_data['SDD'].value_counts()
+    total_count.name = 'SNR'
+    total_count = total_count.to_frame().reset_index()
+    total_count.rename(columns={'index': 'SDD'}, inplace=True)
+    
+    fetal_count = simulation_data.groupby("SDD")['isFetal'].sum()
+    fetal_count.name = 'Fetal SNR'
+    fetal_count = fetal_count.to_frame().reset_index()
+    
+    
+    combined_count = pd.merge(total_count, fetal_count, on='SDD')
+    return combined_count
 
 
 if __name__ == '__main__':
-    raw_data_path = Path('/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
+    raw_data_path = Path(
+        '/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
     output_file = os.getcwd() + os.sep + 'snr1.pkl'
     print(f'saving as {output_file}')
 
@@ -57,7 +64,7 @@ if __name__ == '__main__':
             np.ones((num_rows, 1))
         snr_df['Maternal Wall Thickness'] = maternal_wall_thickness * \
             np.ones((num_rows, 1))
-            
+
         # Add new data to the combined DF
         if combined_df is None:
             combined_df = snr_df
