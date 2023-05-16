@@ -1,11 +1,11 @@
-from inverse_modelling_tfo.data import generate_data_loaders
+from typing import List, Tuple
 from torch import nn
 import torch.nn.functional as F
-from typing import List, Tuple
 import torch.optim as optim
 import torch
 from torch.utils.data import DataLoader
 import pandas as pd
+from inverse_modelling_tfo.data import generate_data_loaders
 
 def create_perceptron_model(node_counts: List[int] = [6, 6, 3, 2, 1]):
     """Create a Multi-Layer Fully-Connected Perceptron based on the array node counts. The first element is the
@@ -23,8 +23,8 @@ def create_perceptron_model(node_counts: List[int] = [6, 6, 3, 2, 1]):
     return nn.Sequential(*layers)
 
 
-def train_model(model: nn.Module, optimizer: optim.Optimizer, criterion, train_loader: DataLoader, validation_loader: DataLoader, 
-                epochs: int = 3, gpu_to_use: int = 3) -> Tuple:
+def train_model(model: nn.Module, optimizer: optim.Optimizer, criterion, train_loader: DataLoader, 
+                validation_loader: DataLoader, epochs: int = 3, gpu_to_use: int = 3) -> Tuple:
     """Convenience function to train model
 
     Args:
