@@ -1,19 +1,21 @@
 from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
-import torch
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 
 
-class IntensityDataset(Dataset):
+class CustomDataset(Dataset):
+    """Custom dataset generated from a table with the x_columns as the predictors and the y_columns
+    as the lables
+    """
     def __init__(self, table: pd.DataFrame, row_ids: List, x_columns: List[str],
                  y_columns: List[str]):
         super().__init__()
         self.table = table
         self.row_ids = row_ids
-        self.x_columns = [table.columns.get_loc(x) for x in x_columns]
-        self.y_columns = [table.columns.get_loc(x) for x in y_columns]
+        self.x_columns = [table.columns.get_loc(x) for x in x_columns]  # integer column #
+        self.y_columns = [table.columns.get_loc(x) for x in y_columns]  # integer column #
 
     def __len__(self):
         return len(self.row_ids)
@@ -60,9 +62,9 @@ def generate_data_loaders(intensity_data_table: pd.DataFrame, params: Dict, x_co
         len(randomized_array) * train_split):]
 
     # Create the datasets
-    training_dataset = IntensityDataset(
+    training_dataset = CustomDataset(
         intensity_data_table, training_indices, x_columns, y_columns)
-    validation_dataset = IntensityDataset(
+    validation_dataset = CustomDataset(
         intensity_data_table, validation_indices, x_columns, y_columns)
 
     # Create the data loaders
