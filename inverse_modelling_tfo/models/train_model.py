@@ -120,8 +120,6 @@ def train_model_wtih_reporting(model: nn.Module, optimizer: optim.Optimizer, cri
         Tuple: (Training losses, Validation losses) averages for each epoch 
     """
     # Set correct GPU
-    # TODO Uncomment this line to set GPU
-    # torch.cuda.set_device(gpu_to_use)
 
     model = model.cuda()
 
@@ -171,8 +169,7 @@ def train_model_wtih_reporting(model: nn.Module, optimizer: optim.Optimizer, cri
             running_loss += loss.item()
         validation_losses.append(running_loss / len(validation_loader))
 
-        tune.report(
-            train_loss=training_losses[-1], val_loss=validation_losses[-1])
+        tune.report(train_loss=training_losses[-1], val_loss=validation_losses[-1], combined_loss=training_losses[-1] + validation_losses[-1])
 
     return training_losses, validation_losses
 
