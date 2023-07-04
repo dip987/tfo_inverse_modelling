@@ -55,27 +55,39 @@ def get_mu_a(saturation: float, concentration: float, wave_int: int) -> float:
 
 
 if __name__ == '__main__':
-    MODE_APPEND = True
+    MODE_APPEND = False
+    DEPTH_CUTOFF = 8    # Integer - cutoff depth(non-incluisve)
     raw_data_path = Path(
         '/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
     mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
     mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
     # Ranges taken by literally googling around
     c_m_list = np.linspace(12, 16, num=5, endpoint=True)
-    c_f_list = np.linspace(11, 17, num=5, endpoint=True)
+    c_f_list = np.linspace(0.11, 0.17, num=5, endpoint=True)
+    # c_f_list = np.array([0.11])
     # Regular saturation ranges
     s_m_list = np.linspace(0.9, 1.0, num=5, endpoint=True)
+    # s_m_list = np.array([0.9])
     s_f_list = np.linspace(0.1, 0.6, num=5, endpoint=True)
+    # s_f_list = np.array([0.1])
 
-    output_file = os.getcwd() + os.sep + 's_based_intensity.pkl'
+    # output_file = os.getcwd() + os.sep + 's_based_intensity_low_conc.pkl'
+    output_file = os.getcwd() + os.sep + 's_based_intensity_low_conc2.pkl'
     print(f'saving as {output_file}')
 
     # Get all the simulation files
     all_files = glob(str(raw_data_path.joinpath('*.pkl')))
     
     # Cutoff
-    all_files = all_files[5:12]
-
+    filtered_by_depth = []
+    for file in all_files:
+            maternal_wall_thickness, uterus_thickness, wave_int = decode_extended_filename(
+            file)
+            if maternal_wall_thickness < DEPTH_CUTOFF:
+                filtered_by_depth.append(file)
+    
+    all_files = filtered_by_depth
+                
     total_count = len(c_m_list) * len(c_f_list) * len(s_m_list) * len(s_f_list) * len(all_files)
     print(f'Total Simulation points {total_count}')
 
@@ -95,7 +107,7 @@ if __name__ == '__main__':
                 for s_m in s_m_list:
                     mu_map_active[1] = get_mu_a(s_m, c_m, wave_int)
                     for c_f in c_f_list:
-                        for s_f in s_m_list:
+                        for s_f in s_f_list:
                             mu_map_active[4] = get_mu_a(s_f, c_f, wave_int)
                             intensity_df = intensity_from_raw(
                                 file, mu_map_active)
@@ -122,5 +134,5 @@ if __name__ == '__main__':
                                 combined_df = pd.concat(
                                     [combined_df, intensity_df], axis=0, ignore_index=True)
                             pbar.update(1)
-
+        ## Save Files
         combined_df.to_pickle(output_file)

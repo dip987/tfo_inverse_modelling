@@ -173,23 +173,3 @@ def train_model_wtih_reporting(model: nn.Module, optimizer: optim.Optimizer, cri
 
     return training_losses, validation_losses
 
-
-if __name__ == '__main__':
-    # Example Code
-    params = {
-        'batch_size': 500, 'shuffle': False, 'num_workers': 2
-    }
-    sim_data = pd.read_pickle(
-        r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl')
-    train, val = generate_data_loaders(sim_data, params, [
-                                       'SDD', 'Uterus Thickness', 'Maternal Wall Thickness', 'Maternal Mu_a', 'Fetal Mu_a', 'Wave Int'], ['Intensity'])
-
-    simple_nn_model = create_perceptron_model()
-    print(simple_nn_model)
-
-    loss_criterion = nn.MSELoss()
-    sgd_optimizer = optim.SGD(
-        simple_nn_model.parameters(), lr=0.0005, momentum=0.9)
-
-    train_model(simple_nn_model, sgd_optimizer,
-                loss_criterion, train, val, epochs=2)

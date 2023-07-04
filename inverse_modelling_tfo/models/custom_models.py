@@ -37,3 +37,22 @@ class TwoChannelCNN(nn.Module):
         x = nn.Flatten()(x)
         x = self.linear_network(x)
         return x
+
+
+class PerceptronReLU(nn.Module):
+    """A Multi-Layer Fully-Connected Perceptron based on the array node counts.
+    The first element is the number of inputs to the network, each consecutive number is the number 
+    of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
+    """
+
+    def __init__(self, node_counts) -> None:
+        super().__init__()
+        self.layers = [nn.Linear(node_counts[0], node_counts[1])]
+        for index, count in enumerate(node_counts[1:-1], start=1):
+            self.layers.append(nn.ReLU())
+            self.layers.append(nn.Linear(count, node_counts[index + 1]))
+        self.layers.append(nn.Flatten())
+        self.model = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.model(x)
