@@ -3,25 +3,30 @@ from torch import nn
 import torch.nn.functional as F
 
 
-class TwoChannelCNN(nn.Module):
-    """A 2 channel based CNN connected to a set of FC layers. The 2 input channels of the CNN each 
-    take half of the inputs. (Say if [input_length] is 40, one channel would get the first 20 and 
-    the next 20 would be fed to another channel). The CNN Outputs onto [cnn_out_channel] number of 
-    output channels. (NOTE: cnn_out_channel has to be divisible by 2. The first half of out channle 
-    only  see the first half of the inputs and the second half see the second half of the inputs)
+class SplitChannelCNN(nn.Module):
+    """A N channel based CNN connected to a set of FC layers. The N input channels of the CNN each 
+    take 1/N-th of the inputs. (Say if [input_length] is 40, and N=2, 1st channel would get the 1st
+    20 and the next 20 would be fed to the 2nd channel). The CNN Outputs onto [cnn_out_channel] 
+    number of output channels. (NOTE: cnn_out_channel has to be divisible by N. This is because 
+    the out channels are maintain the same split/separation as the input. In other words, for the 
+    above example, for [cnn_out_channel] = 4, the first 2 out channels would only get info from the
+    first split channel)
 
     Afterwards, they are connected to a set of linear layers with activations. The output length for
-    each of these linear layers are supploed using [linear_array]
+    each of these linear layers are supplied using [linear_array]
     """
+    # TODO: Currently only using a single conv layer. More might be necessary!
 
-    def __init__(self, input_length: int, cnn_out_channel: int, kernel_size: int,
-                 linear_array: List[int]) -> None:
-        assert cnn_out_channel % 2 == 0, "cnn_out_channel has to be divisible by 2"
+    def __init__(self, split_count: int = 2, input_length: int = 40, cnn_out_channel: int = 4,
+                 kernel_size: int = 5, linear_array: List[int] = [2, 1]) -> None:
         super().__init__()
-        self.split_point = input_length//2
-        self.conv1 = nn.Conv1d(2, cnn_out_channel, kernel_size, groups=2)
+        assert cnn_out_channel % split_count == 0, "cnn_out_channel has to be divisible by split_count"
+        self.split_count = split_count
+        self.inputs_per_split = input_length//split_count
+        self.conv1 = nn.Conv1d(split_count, cnn_out_channel,
+                               kernel_size, groups=split_count)
         self.conv_output_length = cnn_out_channel * \
-            (self.split_point + 1 - kernel_size)
+            (self.inputs_per_split + 1 - kernel_size)
         self.linear_layers = [
             nn.Linear(self.conv_output_length, linear_array[0])]
         for index, count in enumerate(linear_array[0:-1]):
@@ -32,7 +37,7 @@ class TwoChannelCNN(nn.Module):
         self.linear_network = nn.Sequential(*self.linear_layers)
 
     def forward(self, x):
-        x = x.view(-1, 2, self.split_point)
+        x = x.view(-1, self.split_count, self.inputs_per_split)
         x = F.relu(self.conv1(x))
         x = nn.Flatten()(x)
         x = self.linear_network(x)
