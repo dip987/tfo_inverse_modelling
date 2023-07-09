@@ -20,7 +20,8 @@ class SplitChannelCNN(nn.Module):
     def __init__(self, split_count: int = 2, input_length: int = 40, cnn_out_channel: int = 4,
                  kernel_size: int = 5, linear_array: List[int] = [2, 1]) -> None:
         super().__init__()
-        assert cnn_out_channel % split_count == 0, "cnn_out_channel has to be divisible by split_count"
+        split_error_msg = "cnn_out_channel has to be divisible by split_count"
+        assert cnn_out_channel % split_count == 0, split_error_msg
         self.split_count = split_count
         self.inputs_per_split = input_length//split_count
         self.conv1 = nn.Conv1d(split_count, cnn_out_channel,

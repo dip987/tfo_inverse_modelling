@@ -21,5 +21,15 @@ The spatial intensity generated at multiple wavelengths is connected via the int
 3. Ratio - takes the ratio of intensities as the input - either CNN or ANN
 
 ## TODOs
-1. Clean up the feature creation part into functions 
-2. Play with the normalization
+1. Using 0mean unit-variance normalization. Can something else work? It seems to affect the performance quite a bit
+2. Maybe have one data point of higher depth?
+
+## Model Performance
+|TASK| Model Used | Perofrmance|
+------------------------------
+|Boop|Scoop|doop|
+
+
+
+
+
