@@ -25,11 +25,90 @@ The spatial intensity generated at multiple wavelengths is connected via the int
 2. Maybe have one data point of higher depth?
 
 ## Model Performance
-|TASK| Model Used | Perofrmance|
-------------------------------
-|Boop|Scoop|doop|
+Train/Test Split 80/20 (Seed: 70)
+### Predicting Maternal Hb Conc.
+#### Ratio + Spatial Intensity, 3-channel CNN 
+MSE : 1e-3 (Both train/val) on normalized labels  
+![Error %-count](figures/blerp1.png)  
+Largest errors incurred for the largest thickness (6mm) / Thickest conc. (16)
+{'lr': 0.0002206574543783307, 'batch_size': 8, 'momentum': 0.97}  {'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [3, 60, 6, 7, [3, 1]],
+ 'train_split': 0.8}
+
+#### Ratio + Spatial Intensity, Perceptron
+MSE : 1e-3/2e-3 (Both val/train) on normalized labels 
+![Error %-count](figures/blerp2.png)  
+Largest errors incurred for the largest thickness (6mm) / Thickest conc. (16) 
+{'lr': 0.0009715279968497483, 'batch_size': 8, 'momentum': 0.93}  {'model_class': inverse_modelling_tfo.models.custom_models.PerceptronReLU,
+ 'model_params': [[60, 8, 1]],
+ 'train_split': 0.8,
+ 'epochs': 50}  
+ model param 497
 
 
+#### Spatial Intensity, Perceptron  
+MSE : Train/Val 1e-4/3e-5 on normalized labels 
+![Error %-count](figures/blerp3.png)  
+{'lr': 0.0008667218490316007, 'batch_size': 8, 'momentum': 0.97}  
+{'model_class': inverse_modelling_tfo.models.custom_models.PerceptronReLU,
+ 'model_params': [[40, 8, 1]],
+ 'train_split': 0.8,
+ 'epochs': 50} (The overall performance is better but for the bad cases, its worse)
+model param 337 
+
+### Predicting Fetal Hb Conc
+#### Ratio + Spatial Intensity, Perceptron
+![Training Curve](figures/blerp4.png)  
+![Error %-count](figures/blerp5.png)  
+Train MSE : 0.14869143502747126, Val MSE : 0.03905152779151785, {'model_class': inverse_modelling_tfo.models.custom_models.PerceptronReLU,
+ 'model_params': [[60, 8, 1]],
+ 'train_split': 0.8,
+ 'epochs': 50}, {'lr': 0.00025, 'batch_size': 8, 'momentum': 0.94}
+
+#### Ratio + Spatial Intensity, Split Channel CNN  
+Train MSE : 0.42681105581032946, Val MSE : 0.024149980514924577
+![Training Curve](figures/blerp6.png)  
+![Error %-count](figures/blerp7.png)  
+{'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [3, 60, 6, 7, [3, 1]],
+ 'train_split': 0.8,
+ 'epochs': 50}, {'lr': 0.0006514143464572793, 'batch_size': 8, 'momentum': 0.93}
 
 
+### Predicting Maternal Sat.
+Train MSE : 0.001627553783846645, Val MSE : 0.0009969474776880816, 
+![Error %-count](figures/blerp8.png) 
+{'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [3, 60, 6, 7, [3, 1]],
+ 'train_split': 0.8,
+ 'epochs': 50}, {'lr': 0.0008026283729679813, 'batch_size': 8, 'momentum': 0.93},
+ Largest errors incurred for the largest thickness (6mm)/ lower sat end, Trainable params: 307
 
+### Predicting Fetal Sat.
+#### Ratio + Spatial Intensity, Split Channel CNN 
+Train MSE : 0.11205603721293997, Val MSE : 0.018043352855726124, 
+![Error %-count](figures/blerp9.png), {'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [3, 60, 6, 7, [3, 1]],
+ 'train_split': 0.8,
+ 'epochs': 50}, {'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [3, 60, 6, 7, [3, 1]],
+ 'train_split': 0.8,
+ 'epochs': 150}
+ Largest errors incurred for the largest thickness (6mm)/ lower sat end, Trainable params: 307, Train Error(non-normalized): [0.00350175]
+Validation Error(non-normalized): [0.00056385], (A bit finicky to train)
+
+#### Ratio + Spatial Intensity, Perceptron
+Train MSE : 0.05002032499017313, Val MSE : 0.04044787688775266
+![Error](figures/blerp10.png)
+![Error %](figures/blerp11.png)
+Worst error occur at the highest thickness/largest maternal Hb Conc., {'model_class': inverse_modelling_tfo.models.custom_models.PerceptronReLU,
+ 'model_params': [[60, 8, 1]],
+ 'train_split': 0.8,
+ 'epochs': 140}, {'lr': 0.0007742859341147274, 'batch_size': 8, 'momentum': 0.95}
+
+#### Ratio, Perceptron  
+Train MSE : 0.7698480937867722, Val MSE : 0.8465105764409329, ![Error](figures/blerp12.png)
+![Error %](figures/blerp13.png), {'model_class': inverse_modelling_tfo.models.custom_models.PerceptronReLU,
+ 'model_params': [[20, 8, 1]],
+ 'train_split': 0.8,
+ 'epochs': 100}, {'lr': 0.0002887067743586193, 'batch_size': 8, 'momentum': 0.97}
