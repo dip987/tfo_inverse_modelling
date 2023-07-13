@@ -12,7 +12,7 @@ class CustomDataset(Dataset):
     def __init__(self, table: pd.DataFrame, row_ids: List, x_columns: List[str],
                  y_columns: List[str]):
         super().__init__()
-        self.table = table
+        self.table = Tensor(table.values.astype(float))
         self.row_ids = row_ids
         self.x_columns = [table.columns.get_loc(x) for x in x_columns]  # integer column #
         self.y_columns = [table.columns.get_loc(x) for x in y_columns]  # integer column #
@@ -21,8 +21,10 @@ class CustomDataset(Dataset):
         return len(self.row_ids)
 
     def __getitem__(self, item):
-        x = Tensor(self.table.iloc[item, self.x_columns])
-        y = Tensor(self.table.iloc[item, self.y_columns])
+        x = self.table[item, self.x_columns]
+        y = self.table[item, self.y_columns]
+        # x = Tensor(self.table.iloc[item, self.x_columns])
+        # y = Tensor(self.table.iloc[item, self.y_columns])
         return x, y
 
 
