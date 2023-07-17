@@ -7,18 +7,20 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+from inverse_modelling_tfo.data.validation_methods import random_split
 
 
 class CustomDataset(Dataset):
     """Custom dataset generated from a table with the x_columns as the predictors and the y_columns
     as the lables
+
+    PS: This does not shuffle the dataset. Set shuffle to True during training for best results
     """
 
-    def __init__(self, table: pd.DataFrame, row_ids: List, x_columns: List[str],
-                 y_columns: List[str]):
+    def __init__(self, table: pd.DataFrame, x_columns: List[str], y_columns: List[str]):
         super().__init__()
         self.table = torch.Tensor(table.values.astype(float))
-        self.row_ids = row_ids
+        self.row_ids = np.arange(0, len(table), 1)
         self.x_columns = [table.columns.get_loc(x) for x in x_columns]
         self.y_columns = [table.columns.get_loc(x) for x in y_columns]
 
@@ -26,11 +28,9 @@ class CustomDataset(Dataset):
         return len(self.row_ids)
 
     def __getitem__(self, item):
-        x = self.table[item, self.x_columns]
-        y = self.table[item, self.y_columns]
-        # x = Tensor(self.table.iloc[item, self.x_columns])
-        # y = Tensor(self.table.iloc[item, self.y_columns])
-        return x, y
+        predictors = self.table[item, self.x_columns]
+        target = self.table[item, self.y_columns]
+        return predictors, target
 
 
 class DifferentialCombinationDataset(Dataset):
@@ -41,43 +41,54 @@ class DifferentialCombinationDataset(Dataset):
         tissue model parameter
     """
 
-    def __init__(self, table: pd.DataFrame, fixed_columns: List[str], x_columns: List[str], differential_column: str, total_length: int):
+    def __init__(self, table: pd.DataFrame, fixed_columns: List[str], x_columns: List[str],
+                 differential_column: str, total_length: int, allow_zero_diff: bool = True):
         super().__init__()
+        self.allow_zero_diff = allow_zero_diff
         temp_table = table.groupby(fixed_columns)
-        self.all_splits = []
-        self.split_index = []
+        self.all_data_splits = []
+        # Use the length of each table as weight - bigger tables = more data = more weight
+        self.split_weights = []
+        self.split_fixed_columns = []
+
         for index, split_df in temp_table:
-            self.all_splits.append(torch.Tensor(split_df.values.astype(float)))
-            self.split_index.append(index)
+            # tables with only a single row would do us no good -> ignore
+            if len(split_df) > 1:
+                self.all_data_splits.append(torch.Tensor(
+                    split_df.values.astype(float)))
+                self.split_weights.append(len(split_df))
+                self.split_fixed_columns.append(index)
+        # Normalize weights
+        self.split_weights = np.array(self.split_weights, dtype=float)
+        self.split_weights /= np.sum(self.split_weights)
+
         self.x_columns = [table.columns.get_loc(x) for x in x_columns]
         self.differential_column = table.columns.get_loc(differential_column)
         self.fixed_columns = [table.columns.get_loc(x) for x in fixed_columns]
-        # self.variable_columns = list(range(len(table.columns)))
-        # for fixed_column_index in self.fixed_columns:
-        #     self.variable_columns.remove(fixed_column_index)
         self.total_length = total_length
-        self.randomized_table_index = np.random.randint(
-            0, len(self.all_splits), total_length)
-        self.randomized_row_indices = np.random.randint(
-            0, len(self.all_splits[0]), (total_length, 2))
+        # If the loader is empty, skip initialization
+        if self.total_length > 0:
+            self.randomized_indices_list = np.random.choice(range(len(self.all_data_splits)),
+                                                           total_length, p=self.split_weights)
 
     def __len__(self):
         return self.total_length
 
     def __getitem__(self, item):
-        relevant_split = self.all_splits[self.randomized_table_index[item]]
-        relevant_row1 = relevant_split[self.randomized_row_indices[item, 0]]
-        relevant_row2 = relevant_split[self.randomized_row_indices[item, 1]]
+        relevant_split = self.all_data_splits[self.randomized_indices_list[item]]
+        # Randomly(Uniform) pick 2 rows within the table
+        pick_index = np.random.choice(
+            range(len(relevant_split)), 2, replace=self.allow_zero_diff)
+        relevant_row1 = relevant_split[pick_index[0]]
+        relevant_row2 = relevant_split[pick_index[1]]
         combined_x = torch.concat([relevant_row1[self.x_columns],
-                            relevant_row2[self.x_columns]])
+                                   relevant_row2[self.x_columns]])
         differential_y = relevant_row1[self.differential_column] - \
             relevant_row2[self.differential_column]
-        differential_y = differential_y.view(-1, 1)
-        # return x, y
-        return combined_x, differential_y
+        return combined_x, differential_y.view(1,)
 
 
-def generate_data_loaders(intensity_data_table: pd.DataFrame, params: Dict, x_columns: List[str],
+def generate_data_loaders(table: pd.DataFrame, params: Dict, x_columns: List[str],
                           y_columns: List[str], train_split: float = 0.8) -> Tuple[DataLoader, DataLoader]:
     """Convenience function. Creates a shuffled training and validation data loader with the given 
     params using a given Dataframe. Pass in which column names should be included as features and
@@ -94,7 +105,7 @@ def generate_data_loaders(intensity_data_table: pd.DataFrame, params: Dict, x_co
     :return: training dataloader, validation dataloader
 
     Args:
-        intensity_data_table (pd.DataFrame): Data in the form of a Pandas Dataframe
+        table (pd.DataFrame): Data in the form of a Pandas Dataframe
         params (Dict): Params which get directly passed onto pytorch's DataLoader base class. This 
         does not interact with anything else within this function
         x_columns (List[str]): Which columns will be treated as the predictors
@@ -106,18 +117,11 @@ def generate_data_loaders(intensity_data_table: pd.DataFrame, params: Dict, x_co
         Tuple[DataLoader, DataLoader]: Training DataLoader, Validation DataLoader
     """
     # Shuffle and create training + validation row IDs
-    randomized_array = np.random.choice(
-        len(intensity_data_table), size=len(intensity_data_table))
-    training_indices = randomized_array[:int(
-        len(randomized_array) * train_split)]
-    validation_indices = randomized_array[int(
-        len(randomized_array) * train_split):]
+    train_table, validation_table = random_split(table, train_split)
 
     # Create the datasets
-    training_dataset = CustomDataset(
-        intensity_data_table, training_indices, x_columns, y_columns)
-    validation_dataset = CustomDataset(
-        intensity_data_table, validation_indices, x_columns, y_columns)
+    training_dataset = CustomDataset(train_table, x_columns, y_columns)
+    validation_dataset = CustomDataset(validation_table, x_columns, y_columns)
 
     # Create the data loaders
     train_loader = DataLoader(training_dataset, **params)
@@ -126,14 +130,27 @@ def generate_data_loaders(intensity_data_table: pd.DataFrame, params: Dict, x_co
     return train_loader, validation_loader
 
 
-def generate_differential_data_loaders(intensity_data_table: pd.DataFrame, params: Dict,
-                                       fixed_columns: List[str], x_columns: List[str],
-                                       differential_column: List[str], data_length: int,
+def generate_differential_data_loaders(table: pd.DataFrame,
+                                       params: Dict,
+                                       fixed_columns: List[str],
+                                       x_columns: List[str],
+                                       differential_column: List[str],
+                                       data_length: int,
+                                       allow_zero_diff: bool,
                                        train_split: float = 0.8) -> Tuple[DataLoader, DataLoader]:
-    training_dataset = DifferentialCombinationDataset(intensity_data_table, fixed_columns, x_columns,
-                                                      differential_column, int(data_length * train_split))
-    validation_dataset = DifferentialCombinationDataset(intensity_data_table, fixed_columns, x_columns,
-                                                        differential_column, int(data_length * (1 - train_split)))
+    train_table, validation_table = random_split(table, train_split)
+    training_dataset = DifferentialCombinationDataset(train_table, fixed_columns,
+                                                      x_columns,
+                                                      differential_column,
+                                                      int(data_length *
+                                                          train_split),
+                                                      allow_zero_diff)
+    validation_dataset = DifferentialCombinationDataset(validation_table, fixed_columns,
+                                                        x_columns,
+                                                        differential_column,
+                                                        int(data_length *
+                                                            (1 - train_split)),
+                                                        allow_zero_diff)
     # Create the data loaders
     train_loader = DataLoader(training_dataset, **params)
     validation_loader = DataLoader(validation_dataset, **params)
@@ -144,15 +161,14 @@ def generate_differential_data_loaders(intensity_data_table: pd.DataFrame, param
 if __name__ == '__main__':
     params1 = {
         'batch_size': 10,
-        # data is already shuffled. Set a seed before calling this function for consistency
-        'shuffle': False,
+        'shuffle': True,
         'num_workers': 2
     }
     features = ['SDD', 'Uterus Thickness', 'Maternal Wall Thickness', 'Maternal Mu_a',
                 'Fetal Mu_a', 'Wave Int']
     outputs = ['Intensity']
-    data_path = r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl'
-    data = pd.read_pickle(data_path)
+    PATH = r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl'
+    data = pd.read_pickle(PATH)
     train, val = generate_data_loaders(data, params1, features, outputs)
     for x, y in train:
         print(x, y)
