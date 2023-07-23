@@ -83,7 +83,7 @@ if __name__ == '__main__':
     for file in all_files:
             maternal_wall_thickness, uterus_thickness, wave_int = decode_extended_filename(
             file)
-            if maternal_wall_thickness < DEPTH_CUTOFF:
+            if (maternal_wall_thickness >= DEPTH_CUTOFF) and (maternal_wall_thickness < 18):
                 filtered_by_depth.append(file)
     
     all_files = filtered_by_depth

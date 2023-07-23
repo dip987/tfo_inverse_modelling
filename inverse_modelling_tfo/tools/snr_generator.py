@@ -1,3 +1,4 @@
+
 """
 This file generates SNR from a set of simulation files and stores it into 
 a pickle file
