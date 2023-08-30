@@ -17,6 +17,9 @@ from tqdm import tqdm
 from inverse_modelling_tfo.tools.intensity_datagen import intensity_from_raw
 from inverse_modelling_tfo.tools.name_decoder import decode_extended_filename
 
+MU_MAP_BASE1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
+MU_MAP_BASE2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
+
 
 def get_mu_a(saturation: float, concentration: float, wave_int: int) -> float:
     """Calculate the absorption co-efficient of the maternal layer using the given parameters
@@ -59,8 +62,7 @@ if __name__ == '__main__':
     DEPTH_CUTOFF = 8    # Integer - cutoff depth(non-incluisve)
     raw_data_path = Path(
         '/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
-    mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
-    mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
+
     # Ranges taken by literally googling around
     c_m_list = np.linspace(12, 16, num=5, endpoint=True)
     c_f_list = np.linspace(0.11, 0.17, num=5, endpoint=True)
@@ -77,18 +79,19 @@ if __name__ == '__main__':
 
     # Get all the simulation files
     all_files = glob(str(raw_data_path.joinpath('*.pkl')))
-    
+
     # Cutoff
     filtered_by_depth = []
     for file in all_files:
-            maternal_wall_thickness, uterus_thickness, wave_int = decode_extended_filename(
+        maternal_wall_thickness, uterus_thickness, wave_int = decode_extended_filename(
             file)
-            if (maternal_wall_thickness >= DEPTH_CUTOFF) and (maternal_wall_thickness < 18):
-                filtered_by_depth.append(file)
-    
+        if (maternal_wall_thickness >= DEPTH_CUTOFF) and (maternal_wall_thickness < 18):
+            filtered_by_depth.append(file)
+
     all_files = filtered_by_depth
-                
-    total_count = len(c_m_list) * len(c_f_list) * len(s_m_list) * len(s_f_list) * len(all_files)
+
+    total_count = len(c_m_list) * len(c_f_list) * \
+        len(s_m_list) * len(s_f_list) * len(all_files)
     print(f'Total Simulation points {total_count}')
 
     combined_df = pd.read_pickle(output_file) if MODE_APPEND else None
@@ -101,7 +104,7 @@ if __name__ == '__main__':
                 file)
 
             # Get intensity
-            mu_map_active = mu_map_base1.copy() if wave_int == 1 else mu_map_base2.copy()
+            mu_map_active = MU_MAP_BASE1.copy() if wave_int == 1 else MU_MAP_BASE2.copy()
             # Try all possible combos of maternal and fetal mu_a for each file
             for c_m in c_m_list:
                 for s_m in s_m_list:
@@ -134,5 +137,5 @@ if __name__ == '__main__':
                                 combined_df = pd.concat(
                                     [combined_df, intensity_df], axis=0, ignore_index=True)
                             pbar.update(1)
-        ## Save Files
+        # Save Files
         combined_df.to_pickle(output_file)

@@ -54,8 +54,7 @@ class DifferentialCombinationDataset(Dataset):
         for index, split_df in temp_table:
             # tables with only a single row would do us no good -> ignore
             if len(split_df) > 1:
-                self.all_data_splits.append(torch.Tensor(
-                    split_df.values.astype(float)))
+                self.all_data_splits.append(torch.Tensor(split_df.values.astype(float)))
                 self.split_weights.append(len(split_df))
                 self.split_fixed_columns.append(index)
         # Normalize weights
@@ -77,14 +76,11 @@ class DifferentialCombinationDataset(Dataset):
     def __getitem__(self, item):
         relevant_split = self.all_data_splits[self.randomized_indices_list[item]]
         # Randomly(Uniform) pick 2 rows within the table
-        pick_index = np.random.choice(
-            range(len(relevant_split)), 2, replace=self.allow_zero_diff)
+        pick_index = np.random.choice(range(len(relevant_split)), 2, replace=self.allow_zero_diff)
         relevant_row1 = relevant_split[pick_index[0]]
         relevant_row2 = relevant_split[pick_index[1]]
-        combined_x = torch.concat([relevant_row1[self.x_columns],
-                                   relevant_row2[self.x_columns]])
-        differential_y = relevant_row1[self.differential_column] - \
-            relevant_row2[self.differential_column]
+        combined_x = torch.concat([relevant_row1[self.x_columns], relevant_row2[self.x_columns]])
+        differential_y = relevant_row1[self.differential_column] - relevant_row2[self.differential_column]
         return combined_x, differential_y.view(1,)
 
 

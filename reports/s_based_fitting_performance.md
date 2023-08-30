@@ -112,3 +112,64 @@ Train MSE : 0.7698480937867722, Val MSE : 0.8465105764409329, ![Error](figures/b
  'model_params': [[20, 8, 1]],
  'train_split': 0.8,
  'epochs': 100}, {'lr': 0.0002887067743586193, 'batch_size': 8, 'momentum': 0.97}
+
+ ## Fitting the Fetal Hb Conc. Difference
+ Given two points with a set of fixed parameters and 1 changing, can we figure out the change? For this one, I used the updated simulation database with depth upto 16.0mm   
+ The total number of possible combinations is going to be really high. As such, I randomize and create __total_data_len__ combinations and then split them into train/test. Train/Test have non-overlapping data. The combinations are created such that each element of the pair are non-overlapping for train and test.  
+ __allow_zero_diff__ set to Ture makes it that the DataLoader may choose the same row for difference. Which means, the difference itself will be 0.0  
+ The model always predicts a signed differece. And on that it actually does well.  
+ The distribution plots in the following sections show error w.r.t the actual difference values(After un-normalization)   
+ Training all the models were actually a lot easier and very low chance of getting stuck into predicting a mean across all training points.  
+ Context about the data -  More weight is placed on tables where higher number of combinations are possible
+ |Values | Count |
+ |-------|-------|
+ |0.140|    20056|
+ |0.155|    20039|
+ |0.125|    19889|
+ |0.170|    15069|
+ |0.110|    14942|
+ |0.185|    10041|
+ |0.095|     9935|
+ |0.080|     5031|
+ |0.200|     4998|
+
+
+ ### Spatial Intensity, Split Channel CNN
+ Parmeter count : 529, Train MSE : 0.03374639920983463, Val MSE : 0.026251523718237878, {'lr': 0.0002630106921973286, 'batch_size': 32, 'momentum': 0.97}, {'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [4, 80, 8, 7, [4, 2, 1]],
+ 'train_split': 0.8,
+ 'epochs': 25,
+ 'total_data_len': 120000,
+ 'allow_zero_diff': False,
+ 'hyperparam_search_count': 50,
+ 'hyperparam_max_epoch': 10,
+ 'seed': 42}, ![Error](figures/blerp18.png), interpolation weights [1.0, 0.8]   
+ Comment: The largest errors were for 12.0mm model. That is because with this sepcific set of interpolation weights, those curves bent and then moved upwards for far detectors. Which definitely should not be happening! I calculated these weights for 16.mm and the interpolated curves looked more or less what it should be like. The predictions are overestimating the +ve difference values in the worse cases.   
+ We need a way to define these weights properly   
+ Initially tried with a lower total_data_len, the model started producing means. A higher total_data_len should might better results? or not?
+
+### Spatial Intensity, Perceptron ReLu
+param count : 1797, Train MSE : 0.018692410919466055, Val MSE : 0.021544125673050682, {'model_class': inverse_modelling_tfo.models.custom_models.PerceptronReLU,
+ 'model_params': [[80, 20, 8, 1]],
+ 'train_split': 0.8,
+ 'epochs': 25,
+ 'total_data_len': 120000,
+ 'allow_zero_diff': False,
+ 'hyperparam_search_count': 50,
+ 'hyperparam_max_epoch': 10,
+ 'seed': 42}, ![Error](figures/blerp19.png),    
+The worse are for 14mm this time around. But its still inline with the previous conclusion that the interpolation weights are not correct. 
+
+## Fitting without any interpolation
+
+## Perceptron, Spatial Intensity
+{'model_class': inverse_modelling_tfo.models.custom_models.SplitChannelCNN,
+ 'model_params': [4, 80, 8, 7, [4, 2, 1]],
+ 'train_split': 0.8,
+ 'epochs': 25,
+ 'total_data_len': 120000,
+ 'allow_zero_diff': False,
+ 'hyperparam_search_count': 20,
+ 'hyperparam_max_epoch': 10,
+ 'seed': 42}, Train MSE : 0.024685320429853164, Val MSE : 0.016066946913177768, 
+![Error](figures/blerp20.png),    
