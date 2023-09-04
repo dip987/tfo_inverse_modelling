@@ -28,14 +28,12 @@ def create_ratio(data: DataFrame, intensity_in_log: bool) -> DataFrame:
         ratio_feature = wave2 / wave1
 
     # Create a new df with only a single set of wave int
-    data_new = data[data['Wave Int'] == 1.0].drop(
-        columns='Wave Int').reset_index()
+    data_new = data[data['Wave Int'] == 1.0].drop(columns='Wave Int').reset_index()
     data_new['Ratio'] = ratio_feature
 
     # Pivot to bring ratio for all SDD into a column single
     sim_param_columns = _get_sim_param_columns(data.columns)
-    data_new = pivot(data_new, index=sim_param_columns, columns=[
-                     "SDD"], values="Ratio").reset_index()
+    data_new = pivot(data_new, index=sim_param_columns, columns=["SDD"], values="Ratio").reset_index()
     # By default, these column names are of int type. Python does not seem to like that
     # Convert to string
     data_new.columns = [str(col) if _is_number(col) else col for col in data_new.columns]
@@ -56,10 +54,8 @@ def create_spatial_intensity(data: DataFrame) -> DataFrame:
         Intensity) columns removed.
     """
     sim_param_columns = _get_sim_param_columns(data.columns)
-    data_new = pivot(data, index=sim_param_columns, columns=[
-        "SDD", "Wave Int"], values="Intensity").reset_index()
-    data_new.columns = ['_'.join([str(col[0]), str(col[1])])
-                        if col[1] != '' else col[0] for col in data_new.columns]
+    data_new = pivot(data, index=sim_param_columns, columns=["SDD", "Wave Int"], values="Intensity").reset_index()
+    data_new.columns = ['_'.join([str(col[0]), str(col[1])]) if col[1] != '' else col[0] for col in data_new.columns]
     return data_new
 
 
@@ -71,4 +67,4 @@ def _get_sim_param_columns(column_names: Index) -> List:
     return result
 
 def _is_number(obj):
-    return isinstance(obj, int) or isinstance(obj, float)
+    return isinstance(obj, (int, float))

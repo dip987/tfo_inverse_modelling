@@ -21,20 +21,11 @@ import torchinfo
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 
-class CustomLoss(nn.Module):
-    def __init__(self):
-        super(CustomLoss, self).__init__()
-
-    def forward(self, input, target):
-        # Custom loss calculation
-        # Example: mean absolute error
-        loss = torch.mean(torch.abs(input - target)/target)
-        return loss
-
-
 data = pd.read_pickle(
     r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/s_based_intensity_low_conc2.pkl')
 equidistance_detector_normalization(data)
+a = data['SDD'].unique()
+
 
 # Drop Uterus Thickness for now
 data = data.drop(columns='Uterus Thickness')

@@ -1,8 +1,10 @@
 """
 Helper functions to normalize simulation intensity values depending on the configuration.
 """
+from typing import Optional
 from math import pi
 from pandas import DataFrame
+from numpy import ndarray
 
 
 CONSTANT_DETECTOR_COUNT = 20
@@ -16,7 +18,7 @@ SIMULATION_UNITINMM = 1.0
 
 
 
-def equidistance_detector_normalization(data: DataFrame) -> None:
+def equidistance_detector_normalization(data: DataFrame, sdd: Optional[ndarray]=None) -> None:
     """Normalize Intensity data from the equidistance detector type
     of simulation. In this setup, the distance between the detectors
     along the radial ring is always equal. Which in turn leads to 
@@ -31,11 +33,13 @@ def equidistance_detector_normalization(data: DataFrame) -> None:
         data (DataFrame): Simulation data. The data must include an
         'Intensity' and an 'SDD' column. The 'Intensity' column will
         be modified.
+        sdd (Optional[ndarray]): Pass the sorted SDD list for faster execusion.
+        You can also choose to pass None, in which case, this code will calculate it
     """
-    sdd = data['SDD'].unique()
-    sdd.sort()
-    sdd_to_detector_count_map = {
-        dist: count for dist, count in zip(sdd, EQUIDISTANCE_DETECTOR_COUNT)}
+    if sdd is None:
+        sdd = data['SDD'].unique()
+        sdd.sort()
+    sdd_to_detector_count_map = {dist: count for dist, count in zip(sdd, EQUIDISTANCE_DETECTOR_COUNT)}
     data['Intensity'] /= EQUIDISTANCE_DETECTOR_PHOTON_COUNT
     data['Intensity'] /= data['SDD'].map(sdd_to_detector_count_map)
     data['Intensity'] /= pi * SIMULATION_DETECTOR_RADIUS ** 2
