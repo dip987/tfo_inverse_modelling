@@ -96,7 +96,7 @@ def interpolate_exp(data: DataFrame, weights: Tuple[float, float] = (1.0, -3),
     #         interpolated_intensity = y_hat
     #     else:
     #         interpolated_intensity = np.vstack([interpolated_intensity, y_hat])
-    for data_chunk in np.array_split(data, sdd_chunk_size):
+    for data_chunk in np.array_split(data, len(data)//sdd_chunk_size):
         y_hat = interpolate_exp_chunk(data_chunk, weights)
         if interpolated_intensity is None:
             interpolated_intensity = y_hat
@@ -130,11 +130,12 @@ def interpolate_exp_transform(data: DataFrame, new_sdd: List[float], weights: Tu
         data, weights, sdd_chunk_size)
     fitting_param_table = fitting_param_table.reindex(
         fitting_param_table.index.repeat(len(new_sdd))).reset_index(drop=True)
-    
-    new_sdd = np.tile(new_sdd, len(fitting_param_table)// len(new_sdd))
+
+    new_sdd = np.tile(new_sdd, len(fitting_param_table) // len(new_sdd))
     features = generate_fit_eqn_x(new_sdd)
     fitting_param_columns = [f"alpha{x}" for x in range(features.shape[1])]
-    fitting_params = fitting_param_table.loc[:, fitting_param_columns].to_numpy()
+    fitting_params = fitting_param_table.loc[:,
+                                             fitting_param_columns].to_numpy()
     y = features * fitting_params
     y = np.sum(y, axis=1)
     y = np.exp(y)
@@ -176,11 +177,10 @@ def get_interpolate_fit_params(data: DataFrame, weights: Tuple[float, float] = (
     fitting_param_col_names = [f'alpha{x}' for x in range(fit_param_count)]
 
     fitting_param_table = []
-    for data_chunk in np.array_split(data, sdd_chunk_size):
+    for data_chunk in np.array_split(data, len(data)//sdd_chunk_size):
         beta = interpolate_exp_chunk(data_chunk, weights, return_alpha=True)
         fitting_param_table.append(np.hstack(
             [data_chunk.iloc[0][model_parameter_columns].to_numpy(), beta.flatten()]))
-
 
     # for i in range(len(data)//sdd_chunk_size):
     #     data_chunk = data.iloc[sdd_chunk_size*i: sdd_chunk_size * (i + 1), :]
@@ -223,11 +223,11 @@ def get_interpolate_fit_params_custom(data: DataFrame,
 
     fitting_param_table = []
 
-    for data_chunk in np.array_split(data, sdd_chunk_size):
+    for data_chunk in np.array_split(data, len(data)//sdd_chunk_size):
         beta = custom_fit_func(data_chunk, **kwargs)
         fitting_param_table.append(np.hstack(
             [data_chunk.iloc[0][model_parameter_columns].to_numpy(), beta.flatten()]))
-    
+
     # for i in range(len(data)//sdd_chunk_size):
     #     data_chunk = data.iloc[sdd_chunk_size*i: sdd_chunk_size * (i + 1), :]
     #     beta = custom_fit_func(data_chunk, **kwargs)
@@ -253,7 +253,8 @@ if __name__ == "__main__":
         r'/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/test_data.pkl')
     # filtered_data = interpolate_exp(loaded_data, weights=[1.0, 0.8])
     sdd = loaded_data["SDD"].unique()
-    filtered_data = interpolate_exp_transform(loaded_data, new_sdd=sdd, weights=[1.0, 0.8])
+    filtered_data = interpolate_exp_transform(
+        loaded_data, new_sdd=sdd, weights=[1.0, 0.8])
     filtered_data["Old Intensity"] = loaded_data["Intensity"]
     # beta_table = get_interpolate_fit_params(loaded_data, weights=[1, -10])
     print("HALT")

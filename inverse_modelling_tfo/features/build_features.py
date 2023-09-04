@@ -38,8 +38,8 @@ def create_ratio(data: DataFrame, intensity_in_log: bool) -> DataFrame:
                      "SDD"], values="Ratio").reset_index()
     # By default, these column names are of int type. Python does not seem to like that
     # Convert to string
-    data_new.columns = [str(col) if isinstance(col, int) else col for col in data_new.columns]
-    data_new.columns = [str(col) if isinstance(col, int) else col for col in data_new.columns]
+    data_new.columns = [str(col) if _is_number(col) else col for col in data_new.columns]
+    data_new.columns = [str(col) if _is_number(col) else col for col in data_new.columns]
     return data_new
 
 
@@ -69,3 +69,6 @@ def _get_sim_param_columns(column_names: Index) -> List:
     result.remove('Intensity')
     result.remove('Wave Int')
     return result
+
+def _is_number(obj):
+    return isinstance(obj, int) or isinstance(obj, float)
