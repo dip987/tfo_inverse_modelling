@@ -1,15 +1,12 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from torch import nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torch
 from torch.utils.data import DataLoader
-import pandas as pd
-from inverse_modelling_tfo.data import generate_data_loaders
 from ray import tune
 
 
-def create_perceptron_model(node_counts: List[int] = [6, 6, 3, 2, 1]):
+def create_perceptron_model(node_counts: Optional[List[int]] = None):
     """Create a Multi-Layer Fully-Connected Perceptron based on the array node counts. The first element is the
     number of inputs to the network, each consecutive number is the number of nodes(inputs) in each 
     hidden layers and the last element represents the number of outputs.
@@ -18,6 +15,8 @@ def create_perceptron_model(node_counts: List[int] = [6, 6, 3, 2, 1]):
         node_counts (List[int], optional): Number of nodes in each layer in the model. 
         Defaults to [6, 6, 3, 2, 1].
     """
+    if node_counts is None:
+        node_counts = [6, 6, 3, 2, 1]
     layers = [nn.Linear(node_counts[0], node_counts[1])]
     for index, count in enumerate(node_counts[1:-1], start=1):
         layers.append(nn.ReLU())

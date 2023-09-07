@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
-from inverse_modelling_tfo.data.validation_methods import random_split
+from inverse_modelling_tfo.models import RandomSplit, ValidationMethod
 
 
 class CustomDataset(Dataset):
@@ -84,8 +84,8 @@ class DifferentialCombinationDataset(Dataset):
         return combined_x, differential_y.view(1,)
 
 
-def generate_data_loaders(table: pd.DataFrame, params: Dict, x_columns: List[str],
-                          y_columns: List[str], train_split: float = 0.8) -> Tuple[DataLoader, DataLoader]:
+def generate_data_loaders(table: pd.DataFrame, data_loader_params: Dict, x_columns: List[str], y_columns: List[str], 
+                          validation_method: ValidationMethod = RandomSplit(0.8)) -> Tuple[DataLoader, DataLoader]:
     """Convenience function. Creates a shuffled training and validation data loader with the given 
     params using a given Dataframe. Pass in which column names should be included as features and
     which columns are labels.
@@ -102,54 +102,70 @@ def generate_data_loaders(table: pd.DataFrame, params: Dict, x_columns: List[str
 
     Args:
         table (pd.DataFrame): Data in the form of a Pandas Dataframe
-        params (Dict): Params which get directly passed onto pytorch's DataLoader base class. This 
+        data_loader_params (Dict): Params which get directly passed onto pytorch's DataLoader base class. This 
         does not interact with anything else within this function
         x_columns (List[str]): Which columns will be treated as the predictors
         y_columns (List[str]): Which columns will be treated as the labels
-        train_split (float, optional): What fraction of the data to use for training.
-        Defaults to 0.8. The rest 0.20 goes to validation
+        validation_method (ValidationMethod): How to create the validation dataset? Defaults to a random split of 80%
+        training to 20% validation
 
     Returns:
         Tuple[DataLoader, DataLoader]: Training DataLoader, Validation DataLoader
     """
     # Shuffle and create training + validation row IDs
-    train_table, validation_table = random_split(table, train_split)
+    train_table, validation_table = validation_method.split(table)
 
     # Create the datasets
     training_dataset = CustomDataset(train_table, x_columns, y_columns)
     validation_dataset = CustomDataset(validation_table, x_columns, y_columns)
 
     # Create the data loaders
-    train_loader = DataLoader(training_dataset, **params)
-    validation_loader = DataLoader(validation_dataset, **params)
+    train_loader = DataLoader(training_dataset, **data_loader_params)
+    validation_loader = DataLoader(validation_dataset, **data_loader_params)
 
     return train_loader, validation_loader
 
 
-def generate_differential_data_loaders(table: pd.DataFrame,
-                                       params: Dict,
-                                       fixed_columns: List[str],
-                                       x_columns: List[str],
-                                       differential_column: List[str],
-                                       data_length: int,
-                                       allow_zero_diff: bool,
-                                       train_split: float = 0.8) -> Tuple[DataLoader, DataLoader]:
-    train_table, validation_table = random_split(table, train_split)
+def generate_differential_data_loaders(table: pd.DataFrame, data_loader_params: Dict, fixed_columns: List[str],
+                                       x_columns: List[str], differential_column: List[str], data_length: int,
+                                       allow_zero_diff: bool, validation_method: ValidationMethod = RandomSplit(0.8),
+                                        train_split: float = 0.8 )-> Tuple[DataLoader, DataLoader]:
+    """
+    Generate a training and testing dataloader set for Differential data. i.e, it takes two rows from the dataset 
+    and creates a new pair with the target(y) being the difference in the [differential_column]. The fixed columns 
+    stay unchanged. 
+    The table is initially split using the validation_method. Combinations are generated in each split independently.
+    
+
+    Args:
+        table (pd.DataFrame): Original data table
+        data_loader_params (Dict): Params which are passed directly onto the dataloader
+        fixed_columns (List[str]): Which columns remain unchanged 
+        x_columns (List[str]): Features
+        differential_column (List[str]): Which columns change their values between the 2 chosen rows
+        data_length (int): length of all combinations generated
+        allow_zero_diff (bool): Is zero difference between 2 rows allowed?
+        validation_method (ValidationMethod, optional): How to initially split the table into two non-overlapping parts.
+        Defaults to RandomSplit(0.8). We calculate combinations into each part separately 
+        train_split (float, optional): How much of the total data_length is used during training?. Defaults to 0.8.
+
+    Returns:
+        Tuple[DataLoader, DataLoader]: _description_
+    """
+    train_table, validation_table = validation_method.split(table)
     training_dataset = DifferentialCombinationDataset(train_table, fixed_columns,
                                                       x_columns,
                                                       differential_column,
-                                                      int(data_length *
-                                                          train_split),
+                                                      int(data_length * train_split),
                                                       allow_zero_diff)
     validation_dataset = DifferentialCombinationDataset(validation_table, fixed_columns,
                                                         x_columns,
                                                         differential_column,
-                                                        int(data_length *
-                                                            (1 - train_split)),
+                                                        int(data_length * (1 - train_split)),
                                                         allow_zero_diff)
     # Create the data loaders
-    train_loader = DataLoader(training_dataset, **params)
-    validation_loader = DataLoader(validation_dataset, **params)
+    train_loader = DataLoader(training_dataset, **data_loader_params)
+    validation_loader = DataLoader(validation_dataset, **data_loader_params)
 
     return train_loader, validation_loader
 
