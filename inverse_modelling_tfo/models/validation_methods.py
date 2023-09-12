@@ -60,6 +60,23 @@ class CVSplit(ValidationMethod):
         return f"Splits the data into {self.cv_count} parts and returns the {self.window_number}-th window as \
             validation and the rest as training. Does not randomize!"
 
+class HoldOneOut(ValidationMethod):
+    """
+    Hold one sample of a specific column out for the training set and the held out one for validation
+    """
+    def __init__(self, holdout_col_name: str, holdout_value):
+        self.holdout_col_name = holdout_col_name
+        self.holdout_value = holdout_value
+    
+    def split(self, table: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        validation_table = table[table[self.holdout_col_name] == self.holdout_value].copy()
+        train_table = table[table[self.holdout_col_name] != self.holdout_value].copy()
+        return train_table, validation_table
+    
+    def __str__(self) -> str:
+        return f'Holds out f{self.holdout_col_name} columns {self.holdout_value} for validation. The rest are used \
+            for training'
+
 def random_split(table: pd.DataFrame, train_split: float = 0.8):
     """Radomly split the table into two parts - Train, Validation
 
