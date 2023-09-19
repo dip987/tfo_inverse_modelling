@@ -1,10 +1,12 @@
+from typing import List, Tuple, Optional, Dict, Callable, Type
+from copy import deepcopy
 from ray import tune
 from torch import nn
 import torch
 from torch.optim import SGD, Optimizer
 from torch.utils.data import DataLoader
-from typing import List, Tuple, Optional, Dict, Callable
 from .validation_methods import ValidationMethod
+from sklearn.preprocessing import StandardScaler
 
 
 class ModelTrainer:
@@ -23,37 +25,64 @@ class ModelTrainer:
     """
 
     def __init__(self, model: nn.Module, train_loader: DataLoader, validation_loader: DataLoader, epochs: int,
-                 criterion_class):
+                 criterion):
         self.model = model
         self.train_loader = train_loader
         self.validation_loader = validation_loader
         self.epochs = epochs
-        self.criterion_class = criterion_class
+        self.criterion = criterion
         self.optimizer = None
-        self.train_loss = []
-        self.validation_loss = []
+        self.train_loss = [-1]
+        self.validation_loss = [-1]
+        self.combined_loss = []
         self.reporting = False
+        self.dataloader_gen_func_ = None    # Initialized By factory
+        self.dataloader_gen_kargs_ = None   # Initialized By factory
 
-    def set_optimizer(self, optimizer_class, kwargs: Dict):
+
+    def set_optimizer(self, optimizer_class: Type, kwargs: Dict) -> None:
+        """Change the current optimizer. Call this method before calling run to see the effects
+
+        Args:
+            optimizer_class (Type): Name of the optimizer class (NOT an Optimizer object. e.g.: SGD, Adam)
+            kwargs (Dict): Key Word arguments to be passed into the optimizer
+        """
         self.optimizer = optimizer_class(self.model.parameters(), **kwargs)
 
-    def set_default_optimizer(self):
+    def _set_default_optimizer(self) -> None:
+        """Sets the default optimizer
+        """
         self.optimizer = SGD(self.model.parameters(), lr=3e-4, momentum=0.9)
+    
+    def change_batch_size(self, batch_size: int) -> None:
+        """Changes DataLoader batch size
+        (Because of how PyTorch libraries are defined, changing batchsize requires creating a new DataLoader)
+        """
+        try:
+            self.dataloader_gen_kargs_['data_loader_params']['batch_size'] = batch_size
+            self.train_loader, self.validation_loader = self.dataloader_gen_func_(**self.dataloader_gen_kargs_)
+        except:
+            raise KeyError('Incorrectly configured ModelTrainerFactory')
+        
 
     def run(self):
+        """Run Training and store results. Each Run resets all old results
+        """
         # Check for Optimizer
         if self.optimizer is None:
-            self.set_default_optimizer()
+            self._set_default_optimizer()
 
         self.model = self.model.cuda()
         # Rest Losses
         self.train_loss = []
-        self.validation_loader = []
+        self.validation_loss = []
 
-        for epoch in range(self.epochs):  # loop over the dataset multiple times
+        # Train Model
+        self.model = self.model.train()
+        for _ in range(self.epochs):  # loop over the dataset multiple times
             # Training Loop
             running_loss = 0.0
-            for i, data in enumerate(self.train_loader, 0):
+            for data in self.train_loader:
                 # get the inputs; data is a list of [inputs, labels]
                 inputs, labels = data
 
@@ -66,7 +95,7 @@ class ModelTrainer:
 
                 # forward + backward + optimize
                 outputs = self.model(inputs)
-                loss = self.criterion_class(outputs, labels)
+                loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
 
@@ -75,8 +104,9 @@ class ModelTrainer:
             self.train_loss.append(running_loss / len(self.train_loader))
 
             # Validation Loop
+            self.model = self.model.eval()
             running_loss = 0.0
-            for i, data in enumerate(self.validation_loader, 0):
+            for data in self.validation_loader:
                 # get the inputs; data is a list of [inputs, labels]
                 inputs, labels = data
 
@@ -86,36 +116,65 @@ class ModelTrainer:
 
                 with torch.no_grad():
                     outputs = self.model(inputs)
-                    loss = self.criterion_class(outputs, labels)
+                    loss = self.criterion(outputs, labels)
 
                 # print statistics
                 running_loss += loss.item()
             self.validation_loss.append(running_loss / len(self.validation_loader))
+            
+            # Update Combined Loss
+            self.combined_loss.append(self.validation_loss[-1] * self.train_loss[-1])
 
+            # Reporting
             if self.reporting:
-                tune.report(train_loss=self.train_loss[-1], val_loss=self.validation_loss[-1],
-                            combined_loss=self.train_loss[-1] * self.validation_loss[-1])
-
+                tune.report(train_loss=self.train_loss[-1],
+                            val_loss=self.validation_loss[-1],
+                            combined_loss=self.combined_loss[-1])
+    
+    def __str__(self) -> str:
+        return f"""
+        Model Properties:
+        {self.model}
+        Optimizer Properties"
+        {self.optimizer}
+        DataLoader Params: 
+            Batch Size: {self.dataloader_gen_kargs_['data_loader_params']['batch_size']}
+            Validation Method: {self.dataloader_gen_kargs_['validation_method']}
+        Loss:
+            Train Loss: {self.train_loss[-1]}
+            Val. Loss: {self.validation_loss[-1]}"""
+        
 
 class ModelTrainerFactory:
     """
     Contains the blueprint to create ModelTrainer(s). Call create() to get a new ModelTrainer
 
-    Each call to create() creates a new model using the model_class and model_params.
-    The train and val. dataloaders are created using dataloader_gen params during initialization.
+    ## Notes
+    1. The train and val. dataloaders are created using dataloader_gen params during initialization. Be default, all 
+    generated ModelTrainers have the same dataloader underneath to save memory. But that can be changed later on.
+    
+    2. Each call to create() creates a new model using the model_class and model_params.
     """
 
-    def __init__(self, model_class: nn.Module, model_gen_kargs: Dict, dataloader_gen_func: Callable,
+    def __init__(self, model_class: Type, model_gen_kargs: Dict, dataloader_gen_func: Callable,
                  dataloader_gen_kargs: Dict, epochs: int, criterion):
         self.model_class = model_class
         self.model_gen_kargs = model_gen_kargs
+        self.dataloader_gen_func = dataloader_gen_func
+        self.dataloader_gen_kargs = dataloader_gen_kargs
         self.train_loader, self.validation_loader = dataloader_gen_func(**dataloader_gen_kargs)
         self.epochs = epochs
         self.criterion = criterion
 
     def create(self) -> ModelTrainer:
+        """Creates a ModelTrainer based on the given blueprint
+        """
         model = self.model_class(**self.model_gen_kargs)
-        return ModelTrainer(model, self.train_loader, self.validation_loader, self.epochs, self.criterion)
+        trainer = ModelTrainer(model, self.train_loader, self.validation_loader, self.epochs, self.criterion)
+        trainer.dataloader_gen_func_ = self.dataloader_gen_func
+        # Make sure the individual models cannot change the original gen args
+        trainer.dataloader_gen_kargs_ = deepcopy(self.dataloader_gen_kargs)
+        return trainer
 
 
 def train_model(model: nn.Module, optimizer: Optimizer, criterion, train_loader: DataLoader,
@@ -189,7 +248,7 @@ def train_model(model: nn.Module, optimizer: Optimizer, criterion, train_loader:
     return training_losses, validation_losses
 
 
-def train_model_wtih_reporting(model: nn.Module, optimizer: optim.Optimizer, criterion,
+def train_model_wtih_reporting(model: nn.Module, optimizer: Optimizer, criterion,
                                train_loader: DataLoader, validation_loader: DataLoader,
                                epochs: int = 3) -> Tuple:
     """Convenience function to train models with the ray tune workflow. Same function as the regular

@@ -62,3 +62,59 @@ class PerceptronReLU(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+class PerceptronBN(nn.Module):
+    """A Multi-Layer Fully-Connected Perceptron based on the array node counts with Batch Normalization!
+    The first element is the number of inputs to the network, each consecutive number is the number 
+    of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
+    """
+    def __init__(self, node_counts) -> None:
+        super().__init__()
+        self.layers = [nn.Linear(node_counts[0], node_counts[1])]
+        for index, count in enumerate(node_counts[1:-1], start=1):
+            self.layers.append(nn.BatchNorm1d(count))
+            self.layers.append(nn.ReLU())
+            self.layers.append(nn.Linear(count, node_counts[index + 1]))
+        self.layers.append(nn.Flatten())
+        self.model = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.model(x)
+
+class PerceptronDO(nn.Module):
+    """A Multi-Layer Fully-Connected Perceptron based on the array node counts with DropOut!
+    The first element is the number of inputs to the network, each consecutive number is the number 
+    of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
+    """
+    def __init__(self, node_counts) -> None:
+        super().__init__()
+        self.layers = [nn.Linear(node_counts[0], node_counts[1])]
+        for index, count in enumerate(node_counts[1:-1], start=1):
+            self.layers.append(nn.Dropout1d())
+            self.layers.append(nn.ReLU())
+            self.layers.append(nn.Linear(count, node_counts[index + 1]))
+        self.layers.append(nn.Flatten())
+        self.model = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class PerceptronBD(nn.Module):
+    """A Multi-Layer Fully-Connected Perceptron based on the array node counts with Batch Normalization and DropOut!
+    The first element is the number of inputs to the network, each consecutive number is the number 
+    of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
+    """
+    def __init__(self, node_counts) -> None:
+        super().__init__()
+        self.layers = [nn.Linear(node_counts[0], node_counts[1])]
+        for index, count in enumerate(node_counts[1:-1], start=1):
+            self.layers.append(nn.BatchNorm1d(count))
+            self.layers.append(nn.Dropout1d())
+            self.layers.append(nn.ReLU())
+            self.layers.append(nn.Linear(count, node_counts[index + 1]))
+        self.layers.append(nn.Flatten())
+        self.model = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.model(x)

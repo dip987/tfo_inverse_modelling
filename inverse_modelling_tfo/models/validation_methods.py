@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Tuple
 import pandas as pd
 import numpy as np
+from inverse_modelling_tfo.misc import set_seed
 
 class ValidationMethod(ABC):
     """
@@ -21,10 +22,12 @@ class RandomSplit(ValidationMethod):
     """
     Randomly shuffle the data into two parts. The length of each part depends on the [train_split] parameter
     """
-    def __init__(self, train_split:float = 0.8) -> None:
+    def __init__(self, train_split:float = 0.8, seed:int = 42) -> None:
         self.train_split = train_split
+        self.seed = seed
     
     def split(self, table: pd.DataFrame)-> Tuple[pd.DataFrame, pd.DataFrame]:
+        set_seed(self.seed)
         row_ids = np.arange(0, len(table), 1)
         np.random.shuffle(row_ids)
         train_ids = row_ids[:int(len(row_ids) * self.train_split)]
@@ -76,21 +79,3 @@ class HoldOneOut(ValidationMethod):
     def __str__(self) -> str:
         return f'Holds out f{self.holdout_col_name} columns {self.holdout_value} for validation. The rest are used \
             for training'
-
-def random_split(table: pd.DataFrame, train_split: float = 0.8):
-    """Radomly split the table into two parts - Train, Validation
-
-    Args:
-        table (pd.DataFrame): Data Table
-        train_split (float, optional): Defaults to 0.6.
-
-    Returns:
-        _type_: Train, Validation Table
-    """
-    row_ids = np.arange(0, len(table), 1)
-    np.random.shuffle(row_ids)
-    train_ids = row_ids[:int(len(row_ids) * train_split)]
-    validation_ids = row_ids[int(len(row_ids) * train_split):]
-    train_table = table.iloc[train_ids, :].copy().reset_index(drop=True)
-    validation_table = table.iloc[validation_ids, :].copy().reset_index(drop=True)
-    return train_table, validation_table
