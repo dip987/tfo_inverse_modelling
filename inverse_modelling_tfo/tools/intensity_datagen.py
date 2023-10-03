@@ -2,14 +2,16 @@
 This file generates intensity data using RAW type simulation outputs. We can change the absorption 
 co-eff and generate different sets of data. This is meant to train a forward neural network.
 """
-from typing import Dict
-from pathlib import Path
-from glob import glob
 import os
-import pandas as pd
+from glob import glob
+from pathlib import Path
+from typing import Dict
+
 import numpy as np
-from inverse_modelling_tfo.tools.name_decoder import decode_extended_filename
+import pandas as pd
+
 from inverse_modelling_tfo.tools.dataframe_handling import generate_sdd_column_
+from inverse_modelling_tfo.tools.name_decoder import decode_extended_filename
 
 
 # Generate Intensity Values
@@ -33,14 +35,12 @@ def intensity_from_raw(file_path: Path, mu_map: Dict[int, float], unitinmm: floa
     # Take the exponential
     for layer in mu_map.keys():
         if f'L{layer} ppath' in simulation_data.columns:
-            simulation_data[f'L{layer} ppath'] = np.exp(
-                -simulation_data[f'L{layer} ppath'] * unitinmm * mu_map[layer])
+            simulation_data[f'L{layer} ppath'] = np.exp(-simulation_data[f'L{layer} ppath'] * unitinmm * mu_map[layer])
             available_layers.append(f'L{layer} ppath')
 
     # Get Intensity
     # This creates the intensity of each photon individually
-    simulation_data['Intensity'] = simulation_data[available_layers].prod(
-        axis=1)
+    simulation_data['Intensity'] = simulation_data[available_layers].prod(axis=1)
 
     # This line either takes the sum of all photons hitting a certain detector
     simulation_data = simulation_data.groupby(['SDD'])['Intensity'].sum()
@@ -48,15 +48,16 @@ def intensity_from_raw(file_path: Path, mu_map: Dict[int, float], unitinmm: floa
     simulation_data = simulation_data.to_frame().reset_index()
     return simulation_data
 
+
 if __name__ == '__main__':
     raw_data_path = Path('/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
     mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
-    mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}   # 850nm
+    mu_map_base2 = {1: 0.0087, 2: 0.0991, 3: 0.042, 4: 0.012}  # 850nm
     fetal_mu_a = np.arange(0.05, 0.30, 0.04)
     maternal_mu_a = np.arange(0.005, 0.050, 0.004)
     output_file = os.getcwd() + os.sep + 'intensity_summed_sim_data_equidistance_detector.pkl'
     print(f'saving as {output_file}')
-    
+
     # Get all the simulation files
     all_files = glob(str(raw_data_path.joinpath('*.pkl')))
 
@@ -66,7 +67,7 @@ if __name__ == '__main__':
     for file in all_files:
         # Get simulation settings using file name
         maternal_wall_thickness, uterus_thickness, wave_int = decode_extended_filename(file)
-        
+
         # Get intensity
         mu_map_active = mu_map_base1 if wave_int == 1 else mu_map_base2
         # Try all possible combos of maternal and fetal mu_a for each file
