@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from torch import nn
 import torch.nn.functional as F
 
@@ -51,7 +51,7 @@ class PerceptronReLU(nn.Module):
     of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
     """
 
-    def __init__(self, node_counts) -> None:
+    def __init__(self, node_counts: List[int]) -> None:
         super().__init__()
         self.layers = [nn.Linear(node_counts[0], node_counts[1])]
         for index, count in enumerate(node_counts[1:-1], start=1):
@@ -68,7 +68,7 @@ class PerceptronBN(nn.Module):
     The first element is the number of inputs to the network, each consecutive number is the number 
     of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
     """
-    def __init__(self, node_counts) -> None:
+    def __init__(self, node_counts: List[int]) -> None:
         super().__init__()
         self.layers = [nn.Linear(node_counts[0], node_counts[1])]
         for index, count in enumerate(node_counts[1:-1], start=1):
@@ -83,14 +83,22 @@ class PerceptronBN(nn.Module):
 
 class PerceptronDO(nn.Module):
     """A Multi-Layer Fully-Connected Perceptron based on the array node counts with DropOut!
-    The first element is the number of inputs to the network, each consecutive number is the number 
+    ## How to Use
+    1. The first element is the number of inputs to the network, each consecutive number is the number 
     of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
+    2. You can set the Dropout Rate between each layer using dropout_rates. This defaults to 0.5 for each layer. Make
+    sure it's length is 2 less than [node_counts]
+    3. Set the Dropout rate to 0.0 to effectively nullify it
     """
-    def __init__(self, node_counts) -> None:
+    def __init__(self, node_counts: List[int], dropout_rates: Optional[List[float]]=None) -> None:
         super().__init__()
+        if dropout_rates is None:
+            linear_layer_count = len(node_counts) - 1
+            dropout_layer_count = linear_layer_count - 1
+            dropout_rates = [0.5] * dropout_layer_count
         self.layers = [nn.Linear(node_counts[0], node_counts[1])]
         for index, count in enumerate(node_counts[1:-1], start=1):
-            self.layers.append(nn.Dropout1d())
+            self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
             self.layers.append(nn.ReLU())
             self.layers.append(nn.Linear(count, node_counts[index + 1]))
         self.layers.append(nn.Flatten())
@@ -105,12 +113,16 @@ class PerceptronBD(nn.Module):
     The first element is the number of inputs to the network, each consecutive number is the number 
     of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
     """
-    def __init__(self, node_counts) -> None:
+    def __init__(self, node_counts: List[int], dropout_rates: Optional[List[float]]=None) -> None:
         super().__init__()
+        if dropout_rates is None:
+            linear_layer_count = len(node_counts) - 1
+            dropout_layer_count = linear_layer_count - 1
+            dropout_rates = [0.5] * dropout_layer_count
         self.layers = [nn.Linear(node_counts[0], node_counts[1])]
         for index, count in enumerate(node_counts[1:-1], start=1):
             self.layers.append(nn.BatchNorm1d(count))
-            self.layers.append(nn.Dropout1d())
+            self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
             self.layers.append(nn.ReLU())
             self.layers.append(nn.Linear(count, node_counts[index + 1]))
         self.layers.append(nn.Flatten())
