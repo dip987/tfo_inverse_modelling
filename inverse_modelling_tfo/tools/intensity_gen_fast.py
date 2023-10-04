@@ -12,26 +12,48 @@ from numba import njit, prange
 from inverse_modelling_tfo.tools.dataframe_handling import generate_sdd_column_
 
 LAYER_COUNT = 4
+SDD_list = np.array([10, 14, 19, 23, 28, 32, 37, 41, 46, 59, 55, 59, 64, 68, 73, 77, 82, 86, 91, 95])
 
 
 class FastDataGen:
+    """
+    A Fast JIT based implementation of my intensity data generator. The params are following
+
+    file_path: Path variable
+    base_mu_map: numpy array with the relevant mu_a in the same order as the RAW data layers
+    var1_index: (0 start) layer index of the first mu_a that changes
+    var2_index: (0 start) layer index of the second mu_a that changes
+    var1_values: options for the first mu_a
+    var2_values: options for the second mu_a
+
+
+    """
+
     def __init__(self, file_path: Path, base_mu_map: np.ndarray, var1_index: int, var2_index: int,
                  var1_values: np.ndarray, var2_values: np.ndarray):
-        raw_data = FastDataGen._load_data(file_path)
-        self.data_groups = raw_data.groupby("SDD")
+        sim_data = FastDataGen._load_data(file_path)
+
+        # Create all required arrays
+        self.sdd_one_hot = FastDataGen._create_one_hot(sim_data['SDD'].to_numpy())
+
+        # Adapt mu_a to become a numpy vector
+        self.base_mu_a = base_mu_map.reshape(1, -1)
 
         # Find Relevant indices
-        exclude_var2 = list(range(LAYER_COUNT))
-        exclude_var2.pop(var2_index)
-
         exclude_both_var = list(range(LAYER_COUNT))
         exclude_both_var.pop(var2_values)
         exclude_both_var.pop(var1_values)
 
-        self.data_table_static = self.
+        self.fixed_pathlength = sim_data.iloc[:, exclude_both_var].to_numpy()
+        self.var1_pathlengths = sim_data.iloc[:, var1_index].to_numpy()
+        self.var2_pathlengths = sim_data.iloc[:, var2_index].to_numpy()
+        self.fixed_mu_a = self.base_mu_a[exclude_both_var]
+        self.var1_mu_a_options = var1_values
+        self.var2_mu_a_options = var2_values
 
-
-
+    def run(self):
+        FastDataGen._find_intensity(self.fixed_pathlength, self.var1_pathlengths, self.var2_pathlengths,
+                                    self.sdd_one_hot, self.fixed_mu_a, self.var1_mu_a_options, self.var2_mu_a_options)
 
     @staticmethod
     def _load_data(file_path: Path) -> pd.DataFrame:
@@ -41,25 +63,57 @@ class FastDataGen:
         return simulation_data
 
     @staticmethod
-    @njit(parallel=True)
-    def _calculate():
+    @njit(parallel=True, nogil=True)
+    def _create_one_hot(sdd_array: np.ndarray, ):
+        sdd_one_hot = np.full((len(SDD_list), sdd_array.shape[0]), 0.0)
+        for i in range(len(SDD_list)):
+            sdd_one_hot[i, :] = sdd_array == SDD_list[i]
+        return sdd_one_hot
 
-def _find_intensity(file_path: Path, base_mu_map: np.ndarray, var1_index: int, var2_index: int,
-                    var1_values: np.ndarray, var2_values: np.ndarray):
-    
+    @staticmethod
+    @njit(parallel=True, nogil=True)
+    def _find_intensity(fixed_pathlengths: np.array, var1_pathlengths: np.ndarray, var2_pathlengths: np.ndarray,
+                        sdd_one_hot: np.array, fixed_mu_a: np.ndarray, var1_mu_a_options: np.ndarray,
+                        var2_mu_a_options: np.ndarray):
+        # Store the final result from all combinations as one long vector
+        final_result = np.zeros((len(SDD_list) * len(var1_mu_a_options) * len(var2_mu_a_options),))
+        final_result_pointer = 0  # I am too lazy to manually calculate the pointer for stroing results
+        row_count = len(fixed_pathlengths)
+        # Numba requires that during any multiplication all the vectors have the exact same size
+        mu_a_fixed_tiled = np.tile(fixed_mu_a, (row_count, 1))  # Tiled to match fixed_pathlengths
+
+        # Intensity will ultimately be exp( sum ( - pathlength * mu ) )
+        # The sum terms can be Broken Up into 3 parts : Fixed (Doesn't change for a single tissue model), Var1 and Var2
+
+        # Calculate the fixed(Statc) term once and use it for each iteration for the same model
+        fixed_sum_term = np.sum(- fixed_pathlengths * mu_a_fixed_tiled, axis=1)
+
+        for i in prange(len(var1_mu_a_options)):
+            var1_mu_a_tiled = np.tile(var1_mu_a_options[i], (row_count, 1))  # Tiled to match var1_pathlengths
+            # Var1 + fixed term will stay the same for all iterations involving this specific value of var1_mu_a
+            var1_sum = np.add(- var1_pathlengths * var1_mu_a_tiled, fixed_sum_term)
+
+            for j in prange(len(var2_mu_a_options)):
+                var2_mu_a_tiled = np.tile(var2_mu_a_options[j], (row_count, 1))  # Tiled to match var2_pathlengths
+                intensity_column = np.exp(- var2_pathlengths * var2_mu_a_tiled + var1_sum)
+
+                # Use a one-hot encoded 2D matrix to sort the sums for each detector
+                per_sdd_intensity = _calculate_per_sdd_intensity(intensity_column, sdd_one_hot)
+
+                # Store result and update pointer
+                final_result[
+                final_result_pointer: final_result_pointer + per_sdd_intensity.shape[0]] = per_sdd_intensity
+                final_result_pointer += per_sdd_intensity
+
+        return final_result
 
 
-
-# @njit(parallel=True)
-# def exp_sum_mem(x: np.ndarray, count: int):
-#     all_res = np.zeros((count, x.shape[0]))
-#     passed1 = x.copy()
-#     passed1[:, :3] = np.exp(-passed1[:, :3])
-#     for i in prange(count):
-#         e1 = passed1.copy()
-#         e1[:, 3] = np.exp(-e1[:, 3])
-#         all_res[i] = np.sum(e1, axis=1).flatten()
-#     return all_res
+@njit(parallel=True, nogil=True)
+def _calculate_per_sdd_intensity(intensity: np.ndarray, sdd_one_hot: np.ndarray):
+    result = np.zeros(sdd_one_hot.shape[0])
+    for i in prange(sdd_one_hot.shape[0]):
+        result[i] = np.dot(intensity, sdd_one_hot[i, :])
+    return result
 
 
 def intensity_from_raw_fast1(simulation_data: pd.DataFrame, mu_map: Dict[int, float],
@@ -83,10 +137,6 @@ def intensity_from_raw_fast1(simulation_data: pd.DataFrame, mu_map: Dict[int, fl
 @njit(parallel=True, nogil=True)
 def _calculate_exps(vect1: np.ndarray, vect2: np.ndarray):
     return np.exp(np.sum(- vect1 * vect2, axis=1))
-
-
-SDD_list = np.array([10, 14, 19, 23, 28, 32, 37, 41, 46,
-                    59, 55, 59, 64, 68, 73, 77, 82, 86, 91, 95])
 
 
 def intensity_from_raw_fast2(simulation_data: pd.DataFrame, mu_map: Dict[int, float], repeat: int) -> None:
@@ -113,6 +163,7 @@ def _calculate_per_sdd_intensity(vect1: np.ndarray, vect2: np.ndarray, sdd_one_h
         result[i] = np.dot(intensity, sdd_one_hot[i, :])
     return result
 
+
 @njit(parallel=True, nogil=True)
 def _fixed_sum_term(fixed_columns: np.ndarray, mu_a_tiled: np.ndarray):
     """During calculation of intensity, there will be a fixed sum term coming from the static parts for each model. 
@@ -125,10 +176,9 @@ def _fixed_sum_term(fixed_columns: np.ndarray, mu_a_tiled: np.ndarray):
     """
     return np.sum(-fixed_columns * mu_a_tiled, axis=1)
 
-def _col_sum(col1: )
 
-
-
+def _col_sum(col1):
+    pass
 
 
 def intensity_from_raw(simulation_data: pd.DataFrame, mu_map: Dict[int, float], unitinmm: float = 1.0) -> pd.DataFrame:
@@ -155,14 +205,18 @@ def intensity_from_raw(simulation_data: pd.DataFrame, mu_map: Dict[int, float], 
 if __name__ == '__main__':
     raw_data_path = Path(
         "/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector/fa_1_wv_1_sa_0.1_ns_1_ms_10_ut_5.pkl")
-    data = pd.read_pickle(raw_data_path)
-    # Convert X,Y, Z co-ordinates to SDD
-    data['SDD'] = (data['X'] - 100).astype('int32')
-    data.drop(['X', 'Y', 'Z'], axis=1, inplace=True)
     mu_map_base1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
 
+    a = FastDataGen(raw_data_path, np.array([0.0091, 0.0158, 0.0125, 0.013]), 0, 3,
+                    np.array([0.1, 0.2, 0.3]),np.array([0.1, 0.3, 0.4]))
+    # data = pd.read_pickle(raw_data_path)
+    # Convert X,Y, Z co-ordinates to SDD
+    # data['SDD'] = (data['X'] - 100).astype('int32')
+    # data.drop(['X', 'Y', 'Z'], axis=1, inplace=True)
+
     tic = perf_counter()
-    intensity_from_raw_fast2(data, mu_map_base1, 10)
+    a.run()
+    # intensity_from_raw_fast2(data, mu_map_base1, 10)
     # for i in range(10):
     #     # cats = intensity_from_raw_fast1(data, mu_map_base1)
     #     cats = intensity_from_raw(data, mu_map_base1)
