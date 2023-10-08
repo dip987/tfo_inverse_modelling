@@ -1,10 +1,10 @@
 """
 Process the simulated data and create proper features that can be passed onto the model
 """
-from typing import List
+from typing import List, Tuple
 from pandas import DataFrame, pivot, merge
 from pandas.core.indexes.base import Index
-
+from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_fit_params
 
 def create_ratio(data: DataFrame, intensity_in_log: bool) -> DataFrame:
     """Create a Ratio feature from the simulation data
@@ -76,7 +76,28 @@ def create_ratio_and_intensity(data: DataFrame, intensity_in_log: bool) -> DataF
     data2 = create_spatial_intensity(data)
     data = merge(data1, data2, how='inner', on=sim_params)
     return data
-    
+
+def create_curve_fitting_param(data: DataFrame, weights: Tuple[float, float]) -> DataFrame:
+    """Creates curve-fitting parameter features for each combination of simulation parameters using simulation data. 
+    The features are named as alpha0_1, alpha1_1, ..., alpha0_2, ... in the resultant dataframe
+
+    Args:
+        data (DataFrame): Simulation data with "Intensity", "SDD" & "Wave Int" Columns.
+        weights (Tuple[float, float]): Weights passed on to "get_interpolate_fit_params" function
+
+    Returns:
+        DataFrame: A new DataFrame with a new set of spatial intensity column & (Wave Int, SDD,
+        Intensity) columns removed and alpha columns added
+    """
+    sim_params = _get_sim_param_columns(data.columns)
+    data1 = get_interpolate_fit_params(data, weights)
+    fitting_param_columns = list(filter(lambda X: 'alpha' in X, data1.columns))
+    data1 = pivot(data1, index = sim_params, columns=["Wave Int"], values=fitting_param_columns).reset_index()
+    # Flatten the multi-index column
+    # Afterwards the fitting params should become: alpha0_1, alpha1_1, ..., alpha0_2, ...
+    data1.columns = ['_'.join([str(col[0]), str(int(col[1]))]) if col[1] != '' else col[0] for col in data1.columns]
+    return data1
+
 def _get_sim_param_columns(column_names: Index) -> List:
     result = column_names.drop(["SDD", "Intensity", "Wave Int"], errors='ignore')
     return result.to_list()

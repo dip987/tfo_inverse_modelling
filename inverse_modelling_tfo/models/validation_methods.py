@@ -4,7 +4,7 @@ Contains methods to split the data into train/validation based on some validatio
 Use these methods to generate two non-overlapping tables before passing them into DataLoaders
 """
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Any
 import pandas as pd
 import numpy as np
 from inverse_modelling_tfo.misc import set_seed
@@ -67,7 +67,7 @@ class HoldOneOut(ValidationMethod):
     """
     Hold one sample of a specific column out for the training set and the held out one for validation
     """
-    def __init__(self, holdout_col_name: str, holdout_value):
+    def __init__(self, holdout_col_name: str, holdout_value: Any):
         self.holdout_col_name = holdout_col_name
         self.holdout_value = holdout_value
     
