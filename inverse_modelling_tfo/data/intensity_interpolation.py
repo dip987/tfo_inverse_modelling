@@ -28,7 +28,7 @@ def generate_fit_eqn_x(sdd_array: Union[List, np.ndarray]) -> np.ndarray:
 
 
 def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float],
-                          return_alpha: bool = False) -> np.array:
+                          return_alpha: bool = False) -> np.ndarray:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised 
     version of the Intensity. The interpolation uses a weighted version of linear regression. 
     (More info here : https://en.wikipedia.org/wiki/Weighted_least_squares)
@@ -58,8 +58,8 @@ def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float],
 
     Y = np.log(data['Intensity'].to_numpy()).reshape(-1, 1)
     # Define the weight
-    W = np.diag(_generate_weights_log(weights, (data['SDD'].to_numpy()[
-                0], data['SDD'].to_numpy()[1]), data['SDD'].to_numpy()))
+    W = np.diag(_generate_weights_log(weights, (data['SDD'].to_numpy()[0], data['SDD'].to_numpy()[1]),
+                                      data['SDD'].to_numpy()))
     # W = np.diag(np.logspace(weights[0], weights[1], num=len(Y)))
     alpha_hat = np.linalg.inv(x.T @ W @ x) @ x.T @ W @ Y  # Solve
     if return_alpha:
