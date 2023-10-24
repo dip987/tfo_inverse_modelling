@@ -1,9 +1,8 @@
 """
-Calculate intensity from RAW simulation files with optimized and parallel methods
+Calculate intensity from RAW simulation photon path files with optimized and parallel methods
 """
 from pathlib import Path
 from time import perf_counter
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -14,13 +13,16 @@ from inverse_modelling_tfo.tools.dataframe_handling import generate_sdd_column_
 SDD_list = np.array([10, 14, 19, 23, 28, 32, 37, 41, 46, 50, 55, 59, 64, 68, 73, 77, 82, 86, 91, 95])
 
 class NoOpDecorator:
+    """
+    A unity decorator - does nothing - replacement for jit for testing purposes
+    """
     def __init__(self, func):
         self.func = func
 
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
 
-
+# JIT decorator for parallelization and releasing GIL
 fast = njit(parallel=True, nogil=True)
 # fast = NoOpDecorator
 
@@ -70,17 +72,42 @@ class FastDataGen:
         return simulation_data
 
 
-# @fast
-def _create_one_hot(sdd_array: np.ndarray):
+@fast
+def _create_one_hot(sdd_array: np.ndarray) -> np.ndarray:
+    """Create a one-hot encoding to replace the SDD column in simulation data. 
+    The classes in the one-hot are based on [SDD_list]
+
+    Args:
+        sdd_array (np.ndarray): The SDD column of the Simulation data interpreted as a contiguous numpy array
+
+    Returns:
+        np.ndarray: One hot encoding
+    """
     sdd_one_hot = np.full((len(SDD_list), sdd_array.shape[0]), 0.0)
     for i in prange(len(SDD_list)):
         sdd_one_hot[i, :] = sdd_array == SDD_list[i]
     return sdd_one_hot
 
-# @fast
+@fast
 def _find_intensity(fixed_pathlengths: np.array, var1_pathlengths: np.ndarray, var2_pathlengths: np.ndarray,
                     sdd_one_hot: np.array, fixed_mu_a: np.ndarray, var1_mu_a_options: np.ndarray,
-                    var2_mu_a_options: np.ndarray):
+                    var2_mu_a_options: np.ndarray) -> np.ndarray:
+    """Calculate intensity using the given data in a fast manner
+    # TODO: Create documentation for this process at some point
+
+    Args:
+        fixed_pathlengths (np.array): Pathlength columns corresponding to the layers that stay static
+        var1_pathlengths (np.ndarray): Variable pathlength column 1 (outer loop)
+        var2_pathlengths (np.ndarray): Variable pathlength column 2 (inner loop)
+        sdd_one_hot (np.array): One-hot SDD encoding for each row
+        fixed_mu_a (np.ndarray): 1D fixed mu_a corresponding to fixed_pathlength (column dimensions should match)
+        var1_mu_a_options (np.ndarray): all possible mu_a options for the first variable mu_a (mm-1)
+        var2_mu_a_options (np.ndarray): all possible mu_a options for the second variable mu_a (mm-1)
+
+    Returns:
+        np.ndarray: A flattened numpy array containing the intensity at each SDD for every combination of var1 and var2
+        mu_a's (where var1 is the outer loop and var2 is the inner loop)
+    """
     # Store the final result from all combinations as one long vector
     final_result = np.zeros((len(SDD_list) * len(var1_mu_a_options) * len(var2_mu_a_options),))
     row_count = len(fixed_pathlengths)
@@ -97,8 +124,7 @@ def _find_intensity(fixed_pathlengths: np.array, var1_pathlengths: np.ndarray, v
     fixed_sum_term_all = np.exp(- fixed_pathlengths * mu_a_fixed_tiled)
     fixed_sum_term = np.ones((row_count, 1))
     for fixed_column_index in prange(fixed_sum_term_all.shape[1]):
-        fixed_sum_term *= fixed_sum_term_all[:, fixed_column_index].reshape(-1, 1)
-    
+        fixed_sum_term *= fixed_sum_term_all[:, fixed_column_index].copy().reshape(-1, 1)
 
     for i in prange(len(var1_mu_a_options)):
         var1_mu_a_tiled = _mu_tiler(np.array(var1_mu_a_options[i]), row_count)   # Tiled to match var1_pathlengths
@@ -123,10 +149,9 @@ def _find_intensity(fixed_pathlengths: np.array, var1_pathlengths: np.ndarray, v
             final_result_pointer = (i * len(var2_mu_a_options) + j) * per_sdd_intensity.shape[0]
             final_result[final_result_pointer: final_result_pointer + per_sdd_intensity.shape[0]] = per_sdd_intensity
 
-
     return final_result
 
-def _find_intensity_column(fixed_pathlengths: np.array, var1_pathlengths: np.ndarray, var2_pathlengths: np.ndarray,
+def _find_intensity_column(fixed_pathlengths: np.ndarray, var1_pathlengths: np.ndarray, var2_pathlengths: np.ndarray,
                     fixed_mu_a: np.ndarray, var1_mu_a: float, var2_mu_a: float):
     row_count = len(fixed_pathlengths)
     mu_a_fixed_tiled = _mu_tiler(fixed_mu_a, row_count)  # Tiled to match fixed_pathlengths
@@ -141,106 +166,24 @@ def _find_intensity_column(fixed_pathlengths: np.array, var1_pathlengths: np.nda
     intensity_column = np.exp(-var2_pathlengths * var2_mu_a_tiled  + var1_sum)
     return intensity_column
 
-    
 
-# @njit
-def _mu_tiler(mu_a: np.ndarray, vertical_repeats: int):
-    """Vertically tiles the given 1D mu_a map
+@njit
+def _mu_tiler(mu_a: np.ndarray, vertical_repeats: int) -> np.ndarray:
+    """
+    Vertically tiles the given 1D mu_a map
     """
     return mu_a.T.repeat(vertical_repeats).reshape(-1, vertical_repeats).T
 
-# @fast
-def _calculate_per_sdd_intensity(intensity: np.ndarray, sdd_one_hot: np.ndarray):
+@fast
+def _calculate_per_sdd_intensity(intensity: np.ndarray, sdd_one_hot: np.ndarray) -> np.ndarray:
+    """
+    Given an intensity column and one-hot sdd's, calcualtes the intensity at each SDD and packs them in a single 
+    flattened numpy array (The ordering is according to [SDD_list])
+    """
     result = np.zeros((sdd_one_hot.shape[0], ), dtype='float64')
     for i in prange(sdd_one_hot.shape[0]):
         result[i] = np.dot(intensity.flatten(), sdd_one_hot[i, :])
     return result
-
-
-# def intensity_from_raw_fast1(simulation_data: pd.DataFrame, mu_map: Dict[int, float],
-#                              unitinmm: float = 1.0) -> pd.DataFrame:
-#     """
-#     Roughly 3x Speed Improvement over original at doing 10 operations
-#     """
-#     mu_a_vector = np.array(list(mu_map.values())).reshape(1, -1)
-#     mu_a_vector = np.tile(mu_a_vector, (len(simulation_data), 1))
-#     layer_count = mu_a_vector.shape[1]
-#     simulation_data["Intensity"] = _calculate_exps(
-#         simulation_data.iloc[:, :layer_count].to_numpy(), mu_a_vector)
-
-#     # This line either takes the sum of all photons hitting a certain detector
-#     simulation_data = simulation_data.groupby(['SDD'])['Intensity'].sum()
-#     simulation_data.name = "Intensity"
-#     simulation_data = simulation_data.to_frame().reset_index()
-#     return simulation_data
-
-
-# @njit(parallel=True, nogil=True)
-# def _calculate_exps(vect1: np.ndarray, vect2: np.ndarray):
-#     return np.exp(np.sum(- vect1 * vect2, axis=1))
-
-
-# def intensity_from_raw_fast2(simulation_data: pd.DataFrame, mu_map: Dict[int, float], repeat: int) -> None:
-#     """
-#     Vectorized Grouping
-#     """
-#     mu_a_vector = np.array(list(mu_map.values())).reshape(1, -1)
-#     mu_a_vector = np.tile(mu_a_vector, (len(simulation_data), 1))
-#     layer_count = mu_a_vector.shape[1]
-
-#     sdd_one_hot = np.full((len(SDD_list), len(simulation_data)), 0.0)
-#     for i in range(len(SDD_list)):
-#         sdd_one_hot[i, :] = simulation_data['SDD'] == SDD_list[i]
-
-#     for i in range(repeat):
-#         _ = _calculate_per_sdd_intensity(simulation_data.iloc[:, :layer_count].to_numpy(), mu_a_vector, sdd_one_hot)
-
-
-# @njit(parallel=True, nogil=True)
-# def _calculate_per_sdd_intensity(vect1: np.ndarray, vect2: np.ndarray, sdd_one_hot: np.ndarray):
-#     intensity = _calculate_exps(vect1, vect2)
-#     result = np.zeros(sdd_one_hot.shape[0])
-#     for i in prange(sdd_one_hot.shape[0]):
-#         result[i] = np.dot(intensity, sdd_one_hot[i, :])
-#     return result
-
-
-# @njit(parallel=True, nogil=True)
-# def _fixed_sum_term(fixed_columns: np.ndarray, mu_a_tiled: np.ndarray):
-#     """During calculation of intensity, there will be a fixed sum term coming from the static parts for each model. 
-    
-#     This function pre-calculates it for reuse for all iterations on that model. 
-#     Args:
-#         fixed_columns (np.ndarray): Static layer's pathlength columns(L in mm)
-#         mu_a_tiled (np.ndarray): Corresponidng mu_a for each static layer (mm-1) Tiled to be the same 2D size as 
-#         fixed_columns (Numba requires these sizes to be the same)
-#     """
-#     return np.sum(-fixed_columns * mu_a_tiled, axis=1)
-
-
-# def _col_sum(col1):
-#     pass
-
-
-# def intensity_from_raw(simulation_data: pd.DataFrame, mu_map: Dict[int, float], unitinmm: float = 1.0) -> pd.DataFrame:
-#     available_layers = []
-#     # Take the exponential
-#     for layer in mu_map.keys():
-#         if f'L{layer} ppath' in simulation_data.columns:
-#             simulation_data[f'L{layer} ppath'] = np.exp(
-#                 -simulation_data[f'L{layer} ppath'] * unitinmm * mu_map[layer])
-#             available_layers.append(f'L{layer} ppath')
-
-#     # Get Intensity
-#     # This creates the intensity of each photon individually
-#     simulation_data['Intensity'] = simulation_data[available_layers].prod(
-#         axis=1)
-
-#     # This line either takes the sum of all photons hitting a certain detector
-#     simulation_data = simulation_data.groupby(['SDD'])['Intensity'].sum()
-#     simulation_data.name = "Intensity"
-#     simulation_data = simulation_data.to_frame().reset_index()
-#     return simulation_data
 
 
 if __name__ == '__main__':

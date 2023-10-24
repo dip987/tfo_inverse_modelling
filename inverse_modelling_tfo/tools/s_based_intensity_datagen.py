@@ -14,7 +14,7 @@ from glob import glob
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from inverse_modelling_tfo.tools.intensity_datagen import intensity_from_raw
+from inverse_modelling_tfo.tools.intensity_gen_legacy import intensity_from_raw
 from inverse_modelling_tfo.tools.name_decoder import decode_extended_filename
 
 MU_MAP_BASE1 = {1: 0.0091, 2: 0.0158, 3: 0.0125, 4: 0.013}  # 735nm
@@ -94,7 +94,7 @@ if __name__ == '__main__':
         len(s_m_list) * len(s_f_list) * len(all_files)
     print(f'Total Simulation points {total_count}')
 
-    combined_df = pd.read_pickle(output_file) if MODE_APPEND else None
+    combined_df = pd.read_pickle(output_file) if MODE_APPEND else pd.DataFrame()
     # Process each file
     # Note: For these RAW files, the saturation and the state parts of the name do not mean anything
     with tqdm(total=total_count) as pbar:

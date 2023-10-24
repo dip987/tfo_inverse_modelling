@@ -51,7 +51,7 @@ if __name__ == '__main__':
     # Get all the simulation files
     all_files = glob(str(raw_data_path.joinpath('*.pkl')))
 
-    combined_df = None
+    combined_df = pd.DataFrame()
     # Process each file
     # Note: For these RAW files, the saturation and the state parts of the name do not mean anything
     for file in all_files:
@@ -67,10 +67,6 @@ if __name__ == '__main__':
             np.ones((num_rows, 1))
 
         # Add new data to the combined DF
-        if combined_df is None:
-            combined_df = snr_df
-        else:
-            combined_df = pd.concat(
-                [combined_df, snr_df], axis=0, ignore_index=True)
+        combined_df = pd.concat([combined_df, snr_df], axis=0, ignore_index=True)
 
     combined_df.to_pickle(output_file)
