@@ -89,8 +89,8 @@ def _create_one_hot(sdd_array: np.ndarray) -> np.ndarray:
     return sdd_one_hot
 
 @fast
-def _find_intensity(fixed_pathlengths: np.array, var1_pathlengths: np.ndarray, var2_pathlengths: np.ndarray,
-                    sdd_one_hot: np.array, fixed_mu_a: np.ndarray, var1_mu_a_options: np.ndarray,
+def _find_intensity(fixed_pathlengths: np.ndarray, var1_pathlengths: np.ndarray, var2_pathlengths: np.ndarray,
+                    sdd_one_hot: np.ndarray, fixed_mu_a: np.ndarray, var1_mu_a_options: np.ndarray,
                     var2_mu_a_options: np.ndarray) -> np.ndarray:
     """Calculate intensity using the given data in a fast manner
     # TODO: Create documentation for this process at some point

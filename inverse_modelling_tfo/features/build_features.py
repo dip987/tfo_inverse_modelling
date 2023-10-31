@@ -2,9 +2,89 @@
 Process the simulated data and create proper features that can be passed onto the model
 """
 from typing import List, Tuple
+from itertools import permutations
+from abc import ABC, abstractmethod
 from pandas import DataFrame, pivot, merge
 from pandas.core.indexes.base import Index
+import numpy as np
 from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_fit_params
+
+
+# TODO: Convert all these functions to objects - should allow better access to related variables!
+
+class FeatureBuilder(ABC):
+    """
+    Abstract base class to build features from simulation data for training ML models. 
+    
+    Call build() to generate features as a Pandas DataFrame and use [feature_names] and [labels] to get 
+    relevant column names.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.feature_names: List[str] = []
+        self.labels: List[str] = []
+        self.is_ready: bool = False     # Are the feature names ready?
+
+    @abstractmethod
+    def build(self) -> DataFrame:
+        """
+        Build and return the feautes as a DataFrame
+        """
+
+class RowCombinationFeatureBuilder(FeatureBuilder):
+    """
+    Creates new features by combining 2 rows from the given dataset.
+    
+    The row pairs are chosen such that [fixed_labels] have identical values. While all possible values for the
+    [variable_labels] are paired up. (Note: The pairing is a permutation, and NOT a combination). 
+    
+    The output consists of the [fixed_labels], [var_labels 1] & [var_labels 2] as well as the appened 
+    [feature_labels] concatenated for both rows.
+
+    Note: The same row is never selected as both pairs. 
+    """
+    def __init__(self, data: DataFrame, feature_columns: List[str], fixed_labels: List[str],
+                variable_labels: List[str]) -> None:
+        super().__init__()
+        self.data = data
+        self.feature_columns = feature_columns
+        self.fixed_labels = fixed_labels
+        self.variable_labels = variable_labels
+        # Create a possible permutations lookup-table for all possible group lengths
+        self.perm_table = {}
+
+    def build(self):
+        data_groups = self.data.groupby(self.fixed_labels)
+        self._build_perm_table(data_groups.size().unique())
+        new_rows = []
+        for key, data_group in data_groups:
+            index_pairs = self.perm_table[len(data_group)]
+
+            for i, j in index_pairs:
+                new_row = np.hstack([data_group.loc[:, self.feature_columns].iloc[i, :], 
+                                     data_group.loc[:, self.feature_columns].iloc[j, :],
+                                     key, data_group.loc[:, self.variable_labels].iloc[i, :], 
+                                     data_group.loc[:, self.variable_labels].iloc[j, :]])
+                new_rows.append(new_row)
+        new_rows = np.array(new_rows)
+        self._create_column_names()
+        self.is_ready = True
+        return DataFrame(data=new_rows, columns=self.feature_names + self.labels)
+
+    def _build_perm_table(self, available_sizes: np.ndarray):
+        for available_size in available_sizes:
+            self.perm_table[available_size] = list(permutations(range(available_size), 2))
+    
+    def _create_column_names(self):
+        # Combining two rows into one creates 2x input features - named as x_n
+        self.feature_names = [f'x_{n}' for n in range(2 * len(self.feature_columns))]
+        # Combininig two rows creates 2 sets of the variable columns - named var 1 and var 2 for each var
+        new_variable_columns = [f'{var} 1' for var in self.variable_labels] + \
+            [f'{var} 2' for var in self.variable_labels]
+        self.labels = self.fixed_labels + new_variable_columns
+
+
 
 def create_ratio(data: DataFrame, intensity_in_log: bool) -> DataFrame:
     """Create a Ratio feature from the simulation data

@@ -61,8 +61,8 @@ if __name__ == '__main__':
     raw_data_path = Path('/home/rraiyan/simulations/tfo_sim/data/raw_dan_iccps_equispace_detector')
 
     # Ranges taken by literally googling around
-    c_m_list = np.linspace(11.9, 15.9, num=5, endpoint=True)
-    c_f_list = np.linspace(0.10, 0.16, num=5, endpoint=True)
+    c_m_list = np.linspace(12.2, 16.2, num=5, endpoint=True)
+    c_f_list = np.linspace(0.11, 0.17, num=5, endpoint=True)
     # c_f_list = np.array([0.11])
     # Regular saturation ranges
     s_m_list = np.linspace(0.9, 1.0, num=5, endpoint=True)
