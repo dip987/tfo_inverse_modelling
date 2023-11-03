@@ -1,2 +1,2 @@
-from .train_model import train_model, train_model_wtih_reporting
+from .train_model import ModelTrainer, ModelTrainerFactory
 from .validation_methods import ValidationMethod, RandomSplit, CVSplit, HoldOneOut

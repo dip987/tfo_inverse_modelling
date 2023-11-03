@@ -58,8 +58,7 @@ def interpolate_exp_chunk(data: DataFrame, weights: Tuple[float, float],
 
     Y = np.log(data['Intensity'].to_numpy()).reshape(-1, 1)
     # Define the weight
-    W = np.diag(_generate_weights_log(weights, (data['SDD'].to_numpy()[0], data['SDD'].to_numpy()[1]),
-                                      data['SDD'].to_numpy()))
+    W = np.diag(_generate_weights_log(weights, (data['SDD'].to_numpy()[0], data['SDD'].to_numpy()[1]), data['SDD'].to_numpy()))
     # W = np.diag(np.logspace(weights[0], weights[1], num=len(Y)))
     alpha_hat = np.linalg.inv(x.T @ W @ x) @ x.T @ W @ Y  # Solve
     if return_alpha:
@@ -97,6 +96,7 @@ def interpolate_exp(data: DataFrame, weights: Tuple[float, float] = (1.0, -3),
     #     else:
     #         interpolated_intensity = np.vstack([interpolated_intensity, y_hat])
     for data_chunk in np.array_split(data, len(data)//sdd_chunk_size):
+        data_chunk = DataFrame(data_chunk)
         y_hat = interpolate_exp_chunk(data_chunk, weights)
         if interpolated_intensity is None:
             interpolated_intensity = y_hat
@@ -240,7 +240,7 @@ def get_interpolate_fit_params_custom(data: DataFrame,
 
 
 def _generate_weights_log(weight_range: Tuple[float, float], x_range: Tuple[float, float],
-                          detector_x: List) -> List:
+                          detector_x: List) -> List[float]:
     slope = (weight_range[1] - weight_range[0])/(x_range[1] - x_range[0])
     intercept = weight_range[0] - slope * x_range[0]
     weight_y = [slope * x + intercept for x in detector_x]

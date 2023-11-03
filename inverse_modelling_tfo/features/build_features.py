@@ -1,8 +1,8 @@
 """
 Process the simulated data and create proper features that can be passed onto the model
 """
-from typing import List, Tuple, Dict
-from itertools import permutations
+from typing import List, Tuple, Dict, Literal
+from itertools import permutations, combinations
 from pandas import DataFrame, pivot, merge
 from pandas.core.indexes.base import Index
 import numpy as np
@@ -10,62 +10,79 @@ from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_f
 
 
 def create_row_combos(
-    data: DataFrame, feature_columns: List[str], fixed_labels: List[str], variable_labels: List[str]
+    data: DataFrame,
+    feature_columns: List[str],
+    fixed_labels: List[str],
+    variable_labels: List[str],
+    perm_or_comb: Literal["perm", "comb"] = "perm",
+    combo_count: int = 2,
 ) -> Tuple[DataFrame, List[str], List[str]]:
     """
-    Creates new features by combining 2 rows from the given dataset.
+    Creates new features by combining [combo_count] number of rows from the given dataset.
 
-    The row pairs are chosen such that [fixed_labels] have identical values. While all possible values for the
+    The row groups are chosen such that [fixed_labels] have identical values. While all possible values for the
     [variable_labels] are paired up. (Note: The pairing is a permutation, and NOT a combination).
 
     The output consists of the [fixed_labels], [var_labels 1] & [var_labels 2] as well as the appened
     [feature_labels] concatenated for both rows.
 
+    change the [perm_or_comb] to 'comb' to get combinations rather than permutations. Use the [comb_count] to change
+    the number of rows mixed to generate a single new row
+
     The output contains the new DataFrame, feature_columns, label_columns
     """
     data_groups = data.groupby(fixed_labels)
     # Create a possible permutations lookup-table for all possible group lengths
-    perm_table = _build_perm_table(data_groups.size().unique())
+    perm_table = _build_perm_table(data_groups.size().unique(), combo_count, perm_or_comb)
 
     new_rows = []
     for key, data_group in data_groups:
-        index_pairs = perm_table[len(data_group)]
+        combo_indices = perm_table[len(data_group)]
 
-        for i, j in index_pairs:
+        for indices in combo_indices:
             new_row = np.hstack(
                 [
-                    data_group.loc[:, feature_columns].iloc[i, :],
-                    data_group.loc[:, feature_columns].iloc[j, :],
+                    data_group[feature_columns].iloc[indices].to_numpy().flatten(),
                     key,
-                    data_group.loc[:, variable_labels].iloc[i, :],
-                    data_group.loc[:, variable_labels].iloc[j, :],
+                    data_group[variable_labels].iloc[indices].to_numpy().flatten(),
                 ]
             )
             new_rows.append(new_row)
     new_rows = np.array(new_rows)
 
     # Create the feature and label names
-    feature_names = [f"x_{n}" for n in range(2 * len(feature_columns))]
-    new_variable_columns = [f"{var} 1" for var in variable_labels] + [f"{var} 2" for var in variable_labels]
+    feature_names = [f"x_{n}" for n in range(combo_count * len(feature_columns))]
+    new_variable_columns = []
+    for i in range(combo_count):
+        new_variable_columns.append(*[f"{var} {i}" for var in variable_labels])
     labels = fixed_labels + new_variable_columns
 
     return DataFrame(data=new_rows, columns=feature_names + labels), feature_names, labels
 
 
-def _build_perm_table(available_sizes: np.ndarray) -> Dict:
-    """Builds all possible pair permutations of indices for a given set of table lenghts and stores them in a Look-up
-    table.
+def _build_perm_table(available_sizes: np.ndarray, combo_count: int, perm_or_comb: Literal["perm", "comb"]) -> Dict:
+    """Builds all possible pair permutations/combinations of indices for a given set of table lenghts and stores them
+    in a Look-up table.
 
     Args:
         available_sizes (np.ndarray): Available table sizes
+        combo_count(int) : How many rows to mix into a single row
+        perm_or_comb(Literal['perm', 'comb']) : Whether to use Permutation or Combination
 
     Returns:
         Dict: Permutation pair look-up Table with the format {table_len: [(ind1, ind2), (ind1, ind3), ...]}
     """
+    # Sanity Check
+    # TODO: If the table length is smaller than combo_count, throw some sort of error
+    mixing_function = combinations if perm_or_comb == "comb" else permutations
     perm_table = {}
     for available_size in available_sizes:
-        perm_table[available_size] = list(permutations(range(available_size), 2))
+        perm_table[available_size] = np.array(list(mixing_function(range(available_size), combo_count)))
     return perm_table
+
+def create_ror():
+    pass
+    # TODO: 
 
 
 def create_ratio(data: DataFrame, intensity_in_log: bool) -> Tuple[DataFrame, List[str], List[str]]:
