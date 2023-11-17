@@ -5,7 +5,7 @@ determining fitting parameters
 from typing import Tuple, Callable
 import numpy as np
 from pandas import DataFrame
-from .interpolation_function_zoo import interpolate_exp_cubic_root
+from .interpolation_function_zoo import exp_piecewise_affine
 
 InterpolatorFuncType = Callable[[DataFrame, Tuple[float, float], bool], np.ndarray]
 """
@@ -15,16 +15,30 @@ it must return fitting parameters as a numpy array.
 """
 
 
+def default_interpolator(data: DataFrame, weights: Tuple[float, float], return_alpha: bool) -> np.ndarray:
+    """
+    The default interpolator we are currently using across all fits. This is the default input to [interpolate_exp].
+    Change this if we want to use a different interpolator throughtout the entire project.
+
+    Note: The interpolator can be easily overloaded with some other function if needed by passing the new function to
+    either [interpolate_exp] or [get_fit_params]
+    """
+    return exp_piecewise_affine(data, weights, return_alpha, break_indices=[0, 4, 12, 20])
+
+
 def interpolate_exp(
     data: DataFrame,
     weights: Tuple[float, float] = (1.0, -3),
     sdd_chunk_size: int = 20,
-    interpolation_function: InterpolatorFuncType = interpolate_exp_cubic_root,
+    interpolation_function: InterpolatorFuncType = default_interpolator,
     **interpolation_func_kwargs,
 ) -> DataFrame:
     """Exponentially interpolate to chunk of data(20 sets of SDD, preferably) to create a denoised
     version of the Intensity. The interpolation uses a weighted version of linear regression.
     (More info here : https://en.wikipedia.org/wiki/Weighted_least_squares)
+
+    Checek the [default_interpolator] function in the [intesntiy_interpolation] file to figure out which interpolation
+    is currently in use by default
 
     Args:
         data (DataFrame): Simulation data loaded in an orderly fashion. (The code expects all 20
@@ -71,13 +85,15 @@ def get_interpolate_fit_params(
     data: DataFrame,
     weights: Tuple[float, float] = (1.0, -2),
     sdd_chunk_size: int = 20,
-    custom_fit_func: InterpolatorFuncType = interpolate_exp_cubic_root,
+    custom_fit_func: InterpolatorFuncType = default_interpolator,
     **interpolation_func_kwargs,
 ) -> DataFrame:
     """
     Fit a table of simulation data using a custom fitting function. This function will be used on
     [sdd_chunk_size] rows at a time to create a single set of fitting parameters.
 
+    Checek the [default_interpolator] function in the [intesntiy_interpolation] file to figure out which interpolation
+    is currently in use by default
 
     Args:
         data (DataFrame): Simulation data loaded in an orderly fashion. (The code expects all 20

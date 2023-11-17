@@ -18,7 +18,7 @@ common_columns = ['Maternal Wall Thickness', "Fetal Saturation", "Maternal Satur
 # Manual log(intensity) normalization
 # Far values wayy to small to affect anything. Take log
 data['Intensity'] = np.log10(data['Intensity'])
-data = create_spatial_intensity(data)
+data, _, __ = create_spatial_intensity(data)
 
 dl = CustomDataset(data, ['10_1.0', '14_1.0'], ['Fetal Hb Concentration'])
 dl = DifferentialCombinationDataset(data, ['Maternal Wall Thickness',

@@ -59,16 +59,15 @@ class CVSplit(ValidationMethod):
 
     def split(self, table: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         table_splits: List[pd.DataFrame]
-        table_splits = np.array_split(table, self.cv_count)
+        # Linting might show a typing error but numpy.split supports splitting a List[DataFrame]
+        table_splits = np.array_split(table, self.cv_count) # type: ignore
         validation_table = pd.DataFrame(table_splits[self.window_number])
         train_table = table_splits[: self.window_number] + table_splits[: self.window_number + 1 :]
-        # Linting might show a typing error but this is a list of DataFrames
         train_table = pd.concat(train_table, axis=0)
         return train_table, validation_table
 
     def __str__(self) -> str:
-        return f"Splits the data into {self.cv_count} parts and returns the {self.window_number}-th window as \
-            validation and the rest as training. Does not randomize!"
+        return f"Splits the data into {self.cv_count} parts and returns the {self.window_number}-th window as validation and the rest as training. Does not randomize!"
 
 
 class HoldOneOut(ValidationMethod):
