@@ -1,12 +1,128 @@
 """
 Process the simulated data and create proper features that can be passed onto the model
 """
+from abc import ABC, abstractmethod
+from symbol import parameters
 from typing import List, Tuple, Dict, Literal
 from itertools import permutations, combinations
+from click import Parameter
 from pandas import DataFrame, pivot, merge
 from pandas.core.indexes.base import Index
 import numpy as np
 from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_fit_params
+
+
+class FeatureBuilder(ABC):
+    """
+    Create features from simulation intensity data pickle file
+    """
+
+    @abstractmethod
+    def build_feature(self, data: DataFrame) -> DataFrame:
+        """
+        Build a set of features from the simulation data and return a new dataframe containing the features and
+        target labels
+        """
+
+    @abstractmethod
+    def get_one_word_description(self) -> str:
+        """
+        A single word description of what this FeatureBuilder does. Useful for making a process flow diagram
+        """
+
+    @abstractmethod
+    def get_feature_names(self) -> List[str]:
+        """
+        The column names corresponding to the newly created features
+        """
+
+    @abstractmethod
+    def get_label_names(self) -> List[str]:
+        """
+        The column names corresponding to the ground truth labels
+        """
+
+
+class RatioFeatureBuilder(FeatureBuilder):
+    """
+    Create a new feature by calculating the intensity ratio at each SDD.
+
+    Depending on if the data is in logarightmic scale, either subtract or just do a ratio. order determines which wave
+    length acts as the numerator.
+    """
+
+    def __init__(self, intensity_in_log: bool, order: Literal["1", "2"] = "2") -> None:
+        super().__init__()
+        self.intensity_in_log = intensity_in_log
+        self.order = order
+        self.feature_names = []
+        self.sim_param_columns = []
+
+    def build_feature(self, data: DataFrame) -> DataFrame:
+        # Get Intensity for each wavelegth
+        wave1 = data[data["Wave Int"] == 1.0].reset_index()["Intensity"]
+        wave2 = data[data["Wave Int"] == 2.0].reset_index()["Intensity"]
+        # If intensity is in log -> subtract / otherwise divide
+        if self.intensity_in_log:
+            ratio_feature = (wave2 - wave1) if self.order == "2" else (wave1 - wave2)
+        else:
+            ratio_feature = (wave2 / wave1) if self.order == "2" else (wave1 / wave2)
+
+        # Create a new df with only a single set of wave int
+        data_new = data[data["Wave Int"] == 1.0].drop(columns="Wave Int").reset_index()
+        data_new["Ratio"] = ratio_feature
+
+        # Pivot to bring ratio for all SDD into a column single
+        self.sim_param_columns = _get_sim_param_columns(data.columns)
+        data_new = pivot(data_new, index=self.sim_param_columns, columns=["SDD"], values="Ratio").reset_index()
+        # The new ratio columns created have the same name as the SDD value, type of int/float -> our features
+        # Python does not seem to like int/float column names -> convert to string first
+        self.feature_names = [str(col) for col in data_new.columns if _is_number(col)]
+        # Order: The pivot index comes first then the pivot values
+        data_new.columns = self.sim_param_columns + self.feature_names
+        return data_new
+
+    def get_feature_names(self) -> List[str]:
+        return self.feature_names
+
+    def get_label_names(self) -> List[str]:
+        return self.sim_param_columns
+    
+    def get_one_word_description(self) -> str:
+        return 'Intensity\nRatio'
+
+
+class SpatialIntensityFeatureBuilder(FeatureBuilder):
+    """
+    Gather up the intensity at each SDD for the same simulation parameter combinations and transform it into a single
+    row
+    """
+
+    def __init__(self, intensity_in_log: bool, order: Literal["1", "2"] = "2") -> None:
+        super().__init__()
+        self.intensity_in_log = intensity_in_log
+        self.order = order
+        self.feature_names = []
+        self.sim_param_columns = []
+
+    def build_feature(self, data: DataFrame) -> DataFrame:
+        self.sim_param_columns = _get_sim_param_columns(data.columns)
+        data_new = pivot(
+            data, index=self.sim_param_columns, columns=["SDD", "Wave Int"], values="Intensity"
+        ).reset_index()
+        # Data is going to be multi indexed. Flatten the index
+        data_new.columns = [
+            "_".join([str(col[0]), str(col[1])]) if col[1] != "" else col[0] for col in data_new.columns
+        ]
+        # Feature columns are columns that exist in [data_new] but not in sim_param_columns
+        self.feature_names = [x for x in data_new.columns if x not in self.sim_param_columns]
+        return data_new
+
+    def get_feature_names(self) -> List[str]:
+        return self.feature_names
+
+    def get_label_names(self) -> List[str]:
+        return self.sim_param_columns
 
 
 def create_row_combos(
@@ -80,9 +196,10 @@ def _build_perm_table(available_sizes: np.ndarray, combo_count: int, perm_or_com
         perm_table[available_size] = np.array(list(mixing_function(range(available_size), combo_count)))
     return perm_table
 
+
 def create_ror():
     pass
-    # TODO: 
+    # TODO:
 
 
 def create_ratio(data: DataFrame, intensity_in_log: bool) -> Tuple[DataFrame, List[str], List[str]]:
