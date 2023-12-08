@@ -169,6 +169,10 @@ class ModelTrainerFactory:
         self.model_gen_kargs = model_gen_kargs
         self.dataloader_gen_func = dataloader_gen_func
         self.dataloader_gen_kargs = dataloader_gen_kargs
+        # Assert types (Because I don't know how to keep the inputs to the callable ambiguous, without using a
+        # protocol/ too lazy to do that)
+        self.train_loader: DataLoader
+        self.validation_loader: DataLoader
         self.train_loader, self.validation_loader = dataloader_gen_func(**dataloader_gen_kargs)
         self.epochs = epochs
         self.criterion = criterion

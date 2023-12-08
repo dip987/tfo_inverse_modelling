@@ -4,40 +4,10 @@ Methodically generate simulation parameter, which can later be passed onto any o
 
 
 from itertools import product
-from typing import Tuple, List
+from typing import Tuple, List, Union
 import numpy as np
-
-
-def get_mu_a(saturation: float, concentration: float, wave_int: int) -> float:
-    """Calculate the absorption co-efficient of the maternal layer using the given parameters
-
-    Args:
-        saturation (float): Maternal Layer Saturation [0, 1.0]
-        concentration (float): Hb concentration for the maternal layer in g/dL
-        wave_int (int): wavelength of light. Set to 1 for 735nm and 2 for 850nm
-
-    Returns:
-        float: absorption co-efficient
-    """
-    wave_index = wave_int - 1
-    # Constants
-    # 735nm, 850nm, 810nm
-    # Values taken from Takatani(1987), https://omlc.org/spectra/hemoglobin/takatani.html
-    # All values in cm-1/M
-    E_HB = [412.0, 1058.0, 880.0]
-    E_HBO2 = [1464.0, 820.0, 888.0]
-
-    # Convert concentration from g/dL to Moles/liter
-    # per dL -> per L : times 10; g -> M : divide by grams per Mole
-    # Assume HB and HBO2 have similar molar mass
-    concentration = concentration * 10 / 64500  # in M/L
-    # Notes: molar conc. is usually around 150/64500 M/L for regular human blood
-
-    # Use mu_a formula : mu_a = 2.303 * E * Molar Concentration
-    mu_a = 2.303 * concentration * (saturation * E_HB[wave_index] + (1 - saturation) * E_HBO2[wave_index])  # in cm-1
-
-    mu_a = mu_a / 10  # Conversion to mm-1
-    return mu_a
+from pandas import DataFrame
+from inverse_modelling_tfo.tools.optical_properties import get_tissue_mu_a
 
 
 class MuAGenerator:
@@ -46,8 +16,8 @@ class MuAGenerator:
     parameters. Call generate( ) to get maternal, fetal mu_a as a list of numpy array. This can later be passed on to
     simulation data generators. Note: the start & end points for the range tuples are inclusive.
 
-    To alter this class's behaviour, extend it and update this class's internal variables while keeping the generate
-    function unaltered.
+    To alter this class's behaviour, extend it and update this class's internal variables (this includes m_s, m_c, f_s,
+    f_c) while keeping the generate function unaltered.
     """
 
     def __init__(
@@ -60,6 +30,8 @@ class MuAGenerator:
         f_s_count: int,
         f_c_range: Tuple[float, float],
         f_c_count: int,
+        fetal_blood_volume_fraction: float,
+        maternal_blood_volume_fraction: float,
         wave_int: int,
     ) -> None:
         super().__init__()
@@ -67,6 +39,8 @@ class MuAGenerator:
         self.m_c = np.linspace(m_c_range[0], m_c_range[1], num=m_c_count, endpoint=True)
         self.f_s = np.linspace(f_s_range[0], f_s_range[1], num=f_s_count, endpoint=True)
         self.f_c = np.linspace(f_c_range[0], f_c_range[1], num=f_c_count, endpoint=True)
+        self.maternal_blood_volume_fraction = maternal_blood_volume_fraction
+        self.fetal_blood_volume_fraction = fetal_blood_volume_fraction
         self.wave_int = wave_int
 
     def generate(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -78,22 +52,36 @@ class MuAGenerator:
         """
         all_maternal_combos = list(product(self.m_s, self.m_c))
         all_fetal_combos = list(product(self.f_s, self.f_c))
-        all_maternal_mu_a = np.array([get_mu_a(sat, conc, self.wave_int) for sat, conc in all_maternal_combos])
-        all_fetal_mu_a = np.array([get_mu_a(sat, conc, self.wave_int) for sat, conc in all_fetal_combos])
+        all_maternal_mu_a = np.array(
+            [
+                get_tissue_mu_a(self.maternal_blood_volume_fraction, conc, sat, self.wave_int)
+                for sat, conc in all_maternal_combos
+            ]
+        )
+        all_fetal_mu_a = np.array(
+            [
+                get_tissue_mu_a(self.fetal_blood_volume_fraction, conc, sat, self.wave_int)
+                for sat, conc in all_fetal_combos
+            ]
+        )
         return all_maternal_mu_a, all_fetal_mu_a
 
 
 class ProximityMuAGenerator(MuAGenerator):
     """
-    An extension of MuAGenerator where you can include additional concentration values. The additional concentration 
+    An extension of MuAGenerator where you can include additional concentration values. The additional concentration
     values are some fraction larger than each of the values generated from MuAGenerator.
-    
+
+    Note: The additional concentration filed can be an empty list. In that case, this class behaves exactly like a
+    [MuAGenerator] class.
+
     Example
     -------
-    MuGenerator values : 1, 2, 3
+    MuGenerator Hb Conc. values : 1, 2, 3
     fraction : [0.05, -0.05]
-    additional values : 1.05, 2.10, 3.15, 0.95, 1.90, 2.85
+    additional Hb Conc. values : 1.05, 2.10, 3.15, 0.95, 1.90, 2.85
     """
+
     def __init__(
         self,
         m_s_range: Tuple[float, float],
@@ -105,11 +93,23 @@ class ProximityMuAGenerator(MuAGenerator):
         f_c_range: Tuple[float, float],
         f_c_count: int,
         wave_int: int,
+        maternal_blood_volume_fraction: float,
+        fetal_blood_volume_fraction: float,
         maternal_proximity_fractions: List[float],
         fetal_proximity_fractions: List[float],
     ) -> None:
         super().__init__(
-            m_s_range, m_s_count, m_c_range, m_c_count, f_s_range, f_s_count, f_c_range, f_c_count, wave_int
+            m_s_range,
+            m_s_count,
+            m_c_range,
+            m_c_count,
+            f_s_range,
+            f_s_count,
+            f_c_range,
+            f_c_count,
+            fetal_blood_volume_fraction,
+            maternal_blood_volume_fraction,
+            wave_int,
         )
         all_maternal_concs = [self.m_c.copy()]
         for fraction in maternal_proximity_fractions:
@@ -122,3 +122,78 @@ class ProximityMuAGenerator(MuAGenerator):
             additional_concs = self.f_c * (1 + fraction)
             all_fetal_concs.append(additional_concs)
         self.f_c = np.array(all_fetal_concs).flatten()
+
+
+class TMPColumnGenerator:
+    """
+    A convinience class to generate the TMP columns corresponding intensity data generated using Mu_a from a
+    MuAGenerator class.
+
+    Call generate( ) to get the TMP columns as a DataFrame which can be concatenated horizontally with the intensity
+    data.
+
+    """
+
+    def __init__(
+        self,
+        mu_a_gen: MuAGenerator,
+        generated_data_length: int,
+        sdd_list: np.ndarray,
+        wave_int: int,
+        uterus_thickness: Union[float, int],
+        maternal_wall_thickness: Union[float, int],
+    ) -> None:
+        self.mu_a_gen = mu_a_gen
+        self.num_rows = generated_data_length
+        self.sdd_list = sdd_list
+        self.wave_int = wave_int
+        self.uterus_thickness = uterus_thickness
+        self.maternal_wall_thickness = maternal_wall_thickness
+        self.column_names = [
+            "Wave Int",
+            "SDD",
+            "Uterus Thickness",
+            "Maternal Wall Thickness",
+            "Maternal Hb Concentration",
+            "Maternal Saturation",
+            "Fetal Hb Concentration",
+            "Fetal Saturation",
+        ]
+
+    def generate(self) -> DataFrame:
+        """
+        Generate a DataFrame with the TMP annotation columns corresponding to the intensity data generated using Mu_a
+        """
+        all_mu_a_mom, _ = self.mu_a_gen.generate()
+        # Get additional properties for annotating the dataframe
+        all_sat_con_fetus = list(product(self.mu_a_gen.f_s, self.mu_a_gen.f_c))
+        all_sat_con_mom = list(product(self.mu_a_gen.m_s, self.mu_a_gen.m_c))
+        sdd_column = np.tile(self.sdd_list, self.num_rows // len(self.sdd_list))
+        wave_int_column = self.wave_int * np.ones((self.num_rows,))
+        uterus_thickness_column = self.uterus_thickness * np.ones((self.num_rows,))
+        maternal_wall_thickness_column = self.maternal_wall_thickness * np.ones((self.num_rows,))
+        fetal_saturation_column = np.tile(
+            np.repeat(np.array([x[0] for x in all_sat_con_fetus]), len(self.sdd_list)), len(all_mu_a_mom)
+        )
+        fetal_concentration_column = np.tile(
+            np.repeat(np.array([x[1] for x in all_sat_con_fetus]), len(self.sdd_list)), len(all_mu_a_mom)
+        )
+        mom_saturation_column = np.repeat(
+            np.array([x[0] for x in all_sat_con_mom]), self.num_rows // len(all_sat_con_mom)
+        )
+        mom_concentration_column = np.repeat(
+            np.array([x[1] for x in all_sat_con_mom]), self.num_rows // len(all_sat_con_mom)
+        )
+
+        return DataFrame(
+            {
+                "Wave Int": wave_int_column,
+                "SDD": sdd_column,
+                "Uterus Thickness": uterus_thickness_column,
+                "Maternal Wall Thickness": maternal_wall_thickness_column,
+                "Maternal Hb Concentration": mom_concentration_column,
+                "Maternal Saturation": mom_saturation_column,
+                "Fetal Hb Concentration": fetal_concentration_column,
+                "Fetal Saturation": fetal_saturation_column,
+            }
+        )

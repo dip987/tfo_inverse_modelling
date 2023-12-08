@@ -254,7 +254,7 @@ def exp_piecewise_affine(
         return np.array(all_alpha_hat).flatten()
 
     # Use fitting parameters to generate interpolated data
-    y_hat = np.zeros((len(data), 1))
+    y_hat = np.copy(unfitted_data)
     for i, index_slice in enumerate(all_slices):
         y_hat[index_slice] = feature_matrix[index_slice, :] @ all_alpha_hat[i]
     return np.exp(y_hat)
