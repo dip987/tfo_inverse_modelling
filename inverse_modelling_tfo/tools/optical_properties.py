@@ -56,3 +56,6 @@ def get_tissue_mu_a(
     mu_a = venous_volume_fraction * mu_a_venous + arterial_volume_fraction * mu_a_artery + base_tissue_mu_a  # in cm-1
     mu_a = mu_a / 10  # Conversion to mm-1
     return mu_a
+
+if __name__ == "__main__":
+    print(get_tissue_mu_a(0.3, 12, 1.0, 1))

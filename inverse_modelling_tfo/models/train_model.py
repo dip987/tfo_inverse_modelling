@@ -30,8 +30,8 @@ class ModelTrainer:
         self.validation_loader = validation_loader
         self.epochs = epochs
         self.criterion = criterion
-        self.train_loss = [-1]
-        self.validation_loss = [-1]
+        self.train_loss = []
+        self.validation_loss = []
         self.combined_loss = []
         self.reporting = False
         # Set Placeholder values during init, to be updated by the factory
@@ -70,8 +70,8 @@ class ModelTrainer:
 
         self.model = self.model.cuda()
         # Rest Losses
-        self.train_loss = []
-        self.validation_loss = []
+        # self.train_loss = []
+        # self.validation_loss = []
 
         # Train Model
         self.model = self.model.train()

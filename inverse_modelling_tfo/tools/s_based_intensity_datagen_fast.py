@@ -63,7 +63,7 @@ if __name__ == "__main__":
             mu_a_gen = MuAGenerator((0.9, 1.0), 5, (11, 15), 5, (0.2, 0.6), 5, (11, 15), 5, 0.2, 0.22, wave_int)
 
             # Change maternal Hb conc. values
-            mu_a_gen.m_c = np.array([x * 0.95 for x in mu_a_gen.m_c])  # 5% of the original value
+            mu_a_gen.m_c = np.array([x * 1.05 for x in mu_a_gen.m_c])  # 5% above the original value
 
             # Create fetal conc. 5% above, below and at the given value
             for i in range(3):
