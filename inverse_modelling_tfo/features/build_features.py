@@ -2,6 +2,7 @@
 Process the simulated data and create proper features that can be passed onto the model
 """
 from abc import abstractmethod
+from ast import Not
 from typing import List, Literal
 from itertools import product
 from pandas import DataFrame
@@ -9,6 +10,7 @@ import numpy as np
 from inverse_modelling_tfo.features.data_transformations import DataTransformation
 from .build_features_helpers import create_row_combos, _build_perm_table
 
+# TODO: Move this to a config file
 WAVE_INT_COUNT = 2
 
 
@@ -22,6 +24,10 @@ class FeatureBuilder(DataTransformation):
     - Tissue Model Parameters (e.g. Fetal Hb Concentration, Maternal Saturation, etc.)
     """
 
+    def __init__(self):
+        super().__init__()
+        self.chain = None
+
     @abstractmethod
     def build_feature(self, data: DataFrame) -> DataFrame:
         """
@@ -29,8 +35,33 @@ class FeatureBuilder(DataTransformation):
         target labels
         """
 
+    @classmethod
+    @abstractmethod
+    def from_chain(cls, chain: DataTransformation, *args, **kwargs) -> "FeatureBuilder":
+        """
+        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. The chain's 
+        transform/build_feature should be called during the class's own build_feature method (Preferably at the very
+        first line).
+        """
+
     def transform(self, data: DataFrame) -> DataFrame:
         return self.build_feature(data)
+
+    def _apply_chain(self, data: DataFrame) -> DataFrame:
+        """
+        Only apply the chain if it is FeatureBuilder object. Otherwise, return the data as is. Common class method
+        accessible to all subclasses. Each class implementation has the freedom to choose how they want to apply the
+        chain
+        """
+        if self.chain is None:
+            return data
+        elif isinstance(self.chain, FeatureBuilder):
+            # This returns a new copy of the data (OG stays unaltered)
+            return self.chain.transform(data)
+        elif isinstance(self.chain, DataTransformation):
+            return data
+        else:
+            raise ValueError("This object's 'chain' atrribute must be a None or a DataTransformation object")
 
 
 class RowCombinationFeatureBuilder(FeatureBuilder):
@@ -57,6 +88,7 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         self._label = []
 
     def build_feature(self, data: DataFrame) -> DataFrame:
+        data = self._apply_chain(data)
         data_groups = data.groupby(self.fixed_labels)
         # Create a possible permutations lookup-table for all possible group lengths and cache them
         perm_table = _build_perm_table(data_groups.size().unique(), self.combo_count, self.perm_or_comb)
@@ -93,6 +125,19 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         # DO NOT change this ordering
         return self.fixed_labels + new_variable_columns
 
+    @classmethod
+    def from_chain(
+        cls,
+        chain: DataTransformation,
+        variable_labels: List[str],
+        perm_or_comb: Literal["perm", "comb"] = "perm",
+        combo_count: int = 2,
+    ) -> "RowCombinationFeatureBuilder":
+        fixed_labels = [label for label in chain.get_label_names() if label not in variable_labels]
+        return_obj = cls(chain.get_feature_names(), fixed_labels, variable_labels, perm_or_comb, combo_count)
+        return_obj.chain = chain
+        return return_obj
+
 
 class FetalACFeatureBuilder(FeatureBuilder):
     """
@@ -119,6 +164,7 @@ class FetalACFeatureBuilder(FeatureBuilder):
             spatial_intensity_columns (List[str]): List of column names containing the spatial intensity values
             labels (List[str]): List of column names containing the simulation parameters (Stays untouched)
         """
+        super().__init__()
         self.conc_group_column = conc_group_column
         self.mode = mode
         self.perm_or_comb: Literal["perm", "comb"] = perm_or_comb
@@ -130,6 +176,7 @@ class FetalACFeatureBuilder(FeatureBuilder):
         )
 
     def build_feature(self, data: DataFrame) -> DataFrame:
+        data = self._apply_chain(data)
         # Create row combinations for each group
         combination_data = self.combination_feature_builder.build_feature(data)
         combination_feature_names = self.combination_feature_builder.get_feature_names()
@@ -171,6 +218,18 @@ class FetalACFeatureBuilder(FeatureBuilder):
         if self.conc_group_column not in index_columns:
             index_columns.append(self.conc_group_column)
         return index_columns
+
+    @classmethod
+    def from_chain(
+        cls,
+        chain: DataTransformation,
+        conc_group_column: str,
+        perm_or_comb: Literal["perm", "comb"],
+        mode: Literal["-", "/"],
+    ) -> "FetalACFeatureBuilder":
+        return_obj = cls(conc_group_column, perm_or_comb, mode, chain.get_feature_names(), chain.get_label_names())
+        return_obj.chain = chain
+        return return_obj
 
     def _get_detector_count(self) -> int:
         return len(self.intensity_columns) // WAVE_INT_COUNT
@@ -216,6 +275,7 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
         )
 
     def build_feature(self, data: DataFrame) -> DataFrame:
+        data = self._apply_chain(data)
         # Create row combinations for each group
         combination_data = self.combination_feature_builder.build_feature(data)
         combination_feature_names = self.combination_feature_builder.get_feature_names()
@@ -266,6 +326,18 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
             index_columns.append(self.conc_group_column)
         return index_columns
 
+    @classmethod
+    def from_chain(
+        cls,
+        chain: DataTransformation,
+        conc_group_column: str,
+        perm_or_comb: Literal["perm", "comb"],
+        dc_mode: Literal["max", "min"] = "min",
+    ) -> FeatureBuilder:
+        return_obj = cls(conc_group_column, perm_or_comb, chain.get_feature_names(), chain.get_label_names(), dc_mode)
+        return_obj.chain = chain
+        return return_obj
+
     def _get_detector_count(self) -> int:
         return len(self.intensity_columns) // WAVE_INT_COUNT
 
@@ -287,6 +359,7 @@ class TwoColumnOperationFeatureBuilder(FeatureBuilder):
         feature_columns: List[str],
         labels: List[str],
     ) -> None:
+        super().__init__()
         # Check if term1 and term2 rows have the same length
         if len(term1_cols) != len(term2_cols):
             raise ValueError("Numerator and denominator rows must have the same length")
@@ -300,6 +373,7 @@ class TwoColumnOperationFeatureBuilder(FeatureBuilder):
         self.new_features = self._generate_new_feature_names()
 
     def build_feature(self, data: DataFrame) -> DataFrame:
+        data = self._apply_chain(data)
         # Do not modiofy the original data
         data = data.copy()
         # Check if term1 and term2 rows exist in the data
@@ -339,6 +413,21 @@ class TwoColumnOperationFeatureBuilder(FeatureBuilder):
     def get_one_word_description(self) -> str:
         return "Division\nFeature"
 
+    @classmethod
+    def from_chain(
+        cls,
+        chain: DataTransformation,
+        term1_cols: List[str],
+        term2_cols: List[str],
+        operator: Literal["+", "-", "*", "/"],
+        keep_original: bool,
+    ) -> "TwoColumnOperationFeatureBuilder":
+        return_obj = cls(
+            term1_cols, term2_cols, operator, keep_original, chain.get_feature_names(), chain.get_label_names()
+        )
+        return_obj.chain = chain
+        return return_obj
+
     def _generate_new_feature_names(self) -> List[str]:
         feature_names = [f"{term1}_{self.operator}_{term2}" for term1, term2 in zip(self.term1_cols, self.term2_cols)]
         return feature_names
@@ -348,11 +437,13 @@ class LogTransformFeatureBuilder(FeatureBuilder):
     """Apply log transformation to the columns_to_log"""
 
     def __init__(self, columns_to_log: List[str], feature_columns: List[str], labels: List[str]) -> None:
+        super().__init__()
         self.columns_to_log = columns_to_log
         self.feature_columns = feature_columns
         self._labels = labels
 
     def build_feature(self, data: DataFrame) -> DataFrame:
+        data = self._apply_chain(data)
         # Check if the columns to log exist in the data
         if not all([col in data.columns for col in self.columns_to_log]):
             raise ValueError("Columns to log do not exist in the data")
@@ -369,6 +460,12 @@ class LogTransformFeatureBuilder(FeatureBuilder):
     def get_label_names(self) -> List[str]:
         return self._labels.copy()
 
+    @classmethod
+    def from_chain(cls, chain: DataTransformation, columns_to_log: List[str]) -> "LogTransformFeatureBuilder":
+        return_obj = cls(columns_to_log, chain.get_feature_names(), chain.get_label_names())
+        return_obj.chain = chain
+        return return_obj
+
 
 class ConcatenateFeatureBuilder(FeatureBuilder):
     """
@@ -377,6 +474,7 @@ class ConcatenateFeatureBuilder(FeatureBuilder):
     """
 
     def __init__(self, feature_builders: List[FeatureBuilder]):
+        super().__init__()
         self.feature_builders = feature_builders
         self.rename_features = False
         if not self._check_labels_are_same():
@@ -385,6 +483,7 @@ class ConcatenateFeatureBuilder(FeatureBuilder):
             self.rename_features = True
 
     def build_feature(self, data: DataFrame) -> DataFrame:
+        data = self._apply_chain(data)
         transformed_data = [feature_builder(data) for feature_builder in self.feature_builders]
         data_labels_np = transformed_data[0][self.feature_builders[0].get_label_names()].to_numpy()
         data_features = [
@@ -413,6 +512,12 @@ class ConcatenateFeatureBuilder(FeatureBuilder):
                 feature_name for feature_names in feature_column_names for feature_name in feature_names
             ]
         return feature_column_names
+
+    @classmethod
+    def from_chain(
+        cls, chain: DataTransformation, feature_builders: List[FeatureBuilder]
+    ) -> "ConcatenateFeatureBuilder":
+        raise NotImplementedError("ConcatenateFeatureBuilder cannot be created from a chain yet!")
 
     def _check_labels_are_same(self):
         """
