@@ -1,8 +1,19 @@
-from typing import Dict, List, Tuple, Literal
-from itertools import permutations, combinations
+from typing import Dict, Iterator, List, Tuple, Literal
+from itertools import permutations, combinations, combinations_with_replacement, product
 from pandas import DataFrame, Index, merge, pivot
 import numpy as np
 from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_fit_params
+
+# How many ways can 2 pairs be made? Permuation or Combination with/without replacement
+TypePairing = Literal["perm", "comb", "prem_r", "comb_r"]
+
+
+def permutations_with_replacement(m: Iterator, n: int):
+    """
+    Custom implementation of itertools.permutations_with_replacement (Which does not exist btw)
+    """
+    for i in product(m, repeat=n):
+        yield i
 
 
 def create_row_combos(
@@ -10,7 +21,7 @@ def create_row_combos(
     feature_columns: List[str],
     fixed_labels: List[str],
     variable_labels: List[str],
-    perm_or_comb: Literal["perm", "comb"] = "perm",
+    perm_or_comb: TypePairing = "perm",
     combo_count: int = 2,
 ) -> Tuple[DataFrame, List[str], List[str]]:
     """
@@ -55,7 +66,7 @@ def create_row_combos(
     return DataFrame(data=new_rows, columns=feature_names + labels), feature_names, labels
 
 
-def _build_perm_table(available_sizes: np.ndarray, combo_count: int, perm_or_comb: Literal["perm", "comb"]) -> Dict:
+def _build_perm_table(available_sizes: np.ndarray, combo_count: int, perm_or_comb: TypePairing) -> Dict:
     """Builds all possible pair permutations/combinations of indices for a given set of table lenghts and stores them
     in a Look-up table.
 
@@ -69,7 +80,13 @@ def _build_perm_table(available_sizes: np.ndarray, combo_count: int, perm_or_com
     """
     # Sanity Check
     # TODO: If the table length is smaller than combo_count, throw some sort of error
-    mixing_function = combinations if perm_or_comb == "comb" else permutations
+    function_to_pairing_type_mapping = {
+        "perm": permutations,
+        "comb": combinations,
+        "perm_r": permutations_with_replacement,
+        "comb_r": combinations_with_replacement,
+    }
+    mixing_function = function_to_pairing_type_mapping[perm_or_comb]
     perm_table = {}
     for available_size in available_sizes:
         perm_table[available_size] = np.array(list(mixing_function(range(available_size), combo_count)))

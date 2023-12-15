@@ -2,13 +2,13 @@
 Process the simulated data and create proper features that can be passed onto the model
 """
 from abc import abstractmethod
-from ast import Not
 from typing import List, Literal
 from itertools import product
 from pandas import DataFrame
 import numpy as np
 from inverse_modelling_tfo.features.data_transformations import DataTransformation
-from .build_features_helpers import create_row_combos, _build_perm_table
+from .build_features_helpers import create_row_combos, _build_perm_table, TypePairing
+
 
 # TODO: Move this to a config file
 WAVE_INT_COUNT = 2
@@ -39,7 +39,7 @@ class FeatureBuilder(DataTransformation):
     @abstractmethod
     def from_chain(cls, chain: DataTransformation, *args, **kwargs) -> "FeatureBuilder":
         """
-        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. The chain's 
+        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. The chain's
         transform/build_feature should be called during the class's own build_feature method (Preferably at the very
         first line).
         """
@@ -76,14 +76,14 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         feature_columns: List[str],
         fixed_labels: List[str],
         variable_labels: List[str],
-        perm_or_comb: Literal["perm", "comb"] = "perm",
+        perm_or_comb: TypePairing = "perm",
         combo_count: int = 2,
     ) -> None:
         super().__init__()
         self.feature_columns = feature_columns
         self.fixed_labels = fixed_labels
         self.variable_labels = variable_labels
-        self.perm_or_comb: Literal["perm", "comb"] = perm_or_comb
+        self.perm_or_comb: TypePairing = perm_or_comb
         self.combo_count = combo_count
         self._label = []
 
@@ -130,7 +130,7 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         cls,
         chain: DataTransformation,
         variable_labels: List[str],
-        perm_or_comb: Literal["perm", "comb"] = "perm",
+        perm_or_comb: TypePairing = "perm",
         combo_count: int = 2,
     ) -> "RowCombinationFeatureBuilder":
         fixed_labels = [label for label in chain.get_label_names() if label not in variable_labels]
@@ -148,7 +148,7 @@ class FetalACFeatureBuilder(FeatureBuilder):
     def __init__(
         self,
         conc_group_column: str,
-        perm_or_comb: Literal["perm", "comb"],
+        perm_or_comb: TypePairing,
         mode: Literal["-", "/"],
         spatial_intensity_columns: List[str],
         labels: List[str],
@@ -159,7 +159,7 @@ class FetalACFeatureBuilder(FeatureBuilder):
             used to generate the AC component. For example, Each conc. and a point 5% above/blow it have the can belong
             to let's say group 1. Then these points will be used to create the groups
             mode(Literal["-", "/"]): Whetter to use subtraction or division to calculate the AC component
-            perm_or_comb (Literal['perm', 'comb']): Whether to use Permutation or Combination when generating AC points
+            perm_or_comb (Literal['perm', 'comb', 'perm_r', 'comb_r']): Whether to use Permutation or Combination when generating AC points
             from the data points in the same group
             spatial_intensity_columns (List[str]): List of column names containing the spatial intensity values
             labels (List[str]): List of column names containing the simulation parameters (Stays untouched)
@@ -167,7 +167,7 @@ class FetalACFeatureBuilder(FeatureBuilder):
         super().__init__()
         self.conc_group_column = conc_group_column
         self.mode = mode
-        self.perm_or_comb: Literal["perm", "comb"] = perm_or_comb
+        self.perm_or_comb: TypePairing = perm_or_comb
         self._label_names = labels
         self.intensity_columns = spatial_intensity_columns  # Sorted Wv1 first then Wv2
         fixed_labels = self._create_combination_index_columns()
@@ -224,7 +224,7 @@ class FetalACFeatureBuilder(FeatureBuilder):
         cls,
         chain: DataTransformation,
         conc_group_column: str,
-        perm_or_comb: Literal["perm", "comb"],
+        perm_or_comb: TypePairing,
         mode: Literal["-", "/"],
     ) -> "FetalACFeatureBuilder":
         return_obj = cls(conc_group_column, perm_or_comb, mode, chain.get_feature_names(), chain.get_label_names())
@@ -247,7 +247,7 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
     def __init__(
         self,
         conc_group_column: str,
-        perm_or_comb: Literal["perm", "comb"],
+        perm_or_comb: TypePairing,
         spatial_intensity_columns: List[str],
         labels: List[str],
         dc_mode: Literal["max", "min"] = "min",
@@ -264,7 +264,7 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
         """
         super().__init__()
         self.conc_group_column = conc_group_column
-        self.perm_or_comb: Literal["perm", "comb"] = perm_or_comb
+        self.perm_or_comb: TypePairing = perm_or_comb
         self.dc_mode = dc_mode
         self._feature_names = []
         self._label_names = labels
@@ -331,7 +331,7 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
         cls,
         chain: DataTransformation,
         conc_group_column: str,
-        perm_or_comb: Literal["perm", "comb"],
+        perm_or_comb: TypePairing,
         dc_mode: Literal["max", "min"] = "min",
     ) -> FeatureBuilder:
         return_obj = cls(conc_group_column, perm_or_comb, chain.get_feature_names(), chain.get_label_names(), dc_mode)
