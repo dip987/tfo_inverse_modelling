@@ -1,1 +1,1 @@
-from .data_transformations import DataTransformation, LongToWideIntensityTransformation, ToFittingParameterTransformation
+from .data_transformations import SimDataTransformation, LongToWideIntensityTransformation, ToFittingParameterTransformation

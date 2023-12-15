@@ -1,18 +1,18 @@
 """
 Process the simulated data and create proper features that can be passed onto the model
 """
-from abc import ABC, abstractmethod
-from typing import List, Tuple, Dict, Literal
-from itertools import permutations, combinations, product
-from pandas import DataFrame, pivot, merge
-from pandas.core.indexes.base import Index
+from abc import abstractmethod
+from typing import List, Literal
+from itertools import product
+from pandas import DataFrame
 import numpy as np
-from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_fit_params
+from inverse_modelling_tfo.features.data_transformations import DataTransformation
+from .build_features_helpers import create_row_combos, _build_perm_table
 
 WAVE_INT_COUNT = 2
 
 
-class FeatureBuilder(ABC):
+class FeatureBuilder(DataTransformation):
     """
     Create features from using simulation intensity data(pickle file)
     The data should always have the following columns:
@@ -29,23 +29,8 @@ class FeatureBuilder(ABC):
         target labels
         """
 
-    @abstractmethod
-    def get_one_word_description(self) -> str:
-        """
-        A single word description of what this FeatureBuilder does. Useful for making a process flow diagram
-        """
-
-    @abstractmethod
-    def get_feature_names(self) -> List[str]:
-        """
-        The column names corresponding to the newly created features
-        """
-
-    @abstractmethod
-    def get_label_names(self) -> List[str]:
-        """
-        The column names corresponding to the ground truth labels
-        """
+    def transform(self, data: DataFrame) -> DataFrame:
+        return self.build_feature(data)
 
 
 class RowCombinationFeatureBuilder(FeatureBuilder):
@@ -97,7 +82,8 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         return "Row\nCombination"
 
     def get_feature_names(self) -> List[str]:
-        return [f"x_{n}" for n in range(self.combo_count * len(self.feature_columns))]
+        column_ids = product([1, 2], self.feature_columns)
+        return [f"{feature_name}_{n}" for n, feature_name in column_ids]
 
     def get_label_names(self) -> List[str]:
         new_variable_columns = []
@@ -340,7 +326,11 @@ class TwoColumnOperationFeatureBuilder(FeatureBuilder):
     def get_feature_names(self) -> List[str]:
         if self.keep_original:
             return self.old_features + self.new_features
-        old_features_remaining = [feature for feature in self.old_features if (feature not in self.term1_cols) and (feature not in self.term2_cols)]
+        old_features_remaining = [
+            feature
+            for feature in self.old_features
+            if (feature not in self.term1_cols) and (feature not in self.term2_cols)
+        ]
         return old_features_remaining + self.new_features
 
     def get_label_names(self) -> List[str]:
@@ -354,181 +344,94 @@ class TwoColumnOperationFeatureBuilder(FeatureBuilder):
         return feature_names
 
 
-def create_row_combos(
-    data: DataFrame,
-    feature_columns: List[str],
-    fixed_labels: List[str],
-    variable_labels: List[str],
-    perm_or_comb: Literal["perm", "comb"] = "perm",
-    combo_count: int = 2,
-) -> Tuple[DataFrame, List[str], List[str]]:
+class LogTransformFeatureBuilder(FeatureBuilder):
+    """Apply log transformation to the columns_to_log"""
+
+    def __init__(self, columns_to_log: List[str], feature_columns: List[str], labels: List[str]) -> None:
+        self.columns_to_log = columns_to_log
+        self.feature_columns = feature_columns
+        self._labels = labels
+
+    def build_feature(self, data: DataFrame) -> DataFrame:
+        # Check if the columns to log exist in the data
+        if not all([col in data.columns for col in self.columns_to_log]):
+            raise ValueError("Columns to log do not exist in the data")
+        new_data = data.copy()
+        new_data[self.columns_to_log] = np.log10(new_data[self.columns_to_log])
+        return new_data
+
+    def get_one_word_description(self) -> str:
+        return "Log\nTransform"
+
+    def get_feature_names(self) -> List[str]:
+        return self.feature_columns.copy()
+
+    def get_label_names(self) -> List[str]:
+        return self._labels.copy()
+
+
+class ConcatenateFeatureBuilder(FeatureBuilder):
     """
-    Creates new features by combining [combo_count] number of rows from the given dataset.
-
-    The row groups are chosen such that [fixed_labels] have identical values. While all possible values for the
-    [variable_labels] are paired up. (Note: The pairing is a permutation, and NOT a combination).
-
-    The output consists of the [fixed_labels], [var_labels 1] & [var_labels 2] as well as the appened
-    [feature_labels] concatenated for both rows.
-
-    change the [perm_or_comb] to 'comb' to get combinations rather than permutations. Use the [comb_count] to change
-    the number of rows mixed to generate a single new row
-
-    The output contains the new DataFrame, feature_columns, label_columns
+    Concatenate the features from multiple FeatureBuilders. If there are any duplicate feature names, all the feature
+    names are replaced by "c_n" where n is the some integer
     """
-    data_groups = data.groupby(fixed_labels)
-    # Create a possible permutations lookup-table for all possible group lengths
-    perm_table = _build_perm_table(data_groups.size().unique(), combo_count, perm_or_comb)
 
-    new_rows = []
-    for key, data_group in data_groups:
-        combo_indices = perm_table[len(data_group)]
-        for indices in combo_indices:
-            new_row = np.hstack(
-                [
-                    data_group[feature_columns].iloc[indices].to_numpy().flatten(),
-                    key,
-                    data_group[variable_labels].iloc[indices].to_numpy().flatten(),
-                ]
+    def __init__(self, feature_builders: List[FeatureBuilder]):
+        self.feature_builders = feature_builders
+        self.rename_features = False
+        if not self._check_labels_are_same():
+            raise ValueError("Feature builders do not have the same labels")
+        if not self._check_features_are_unique():
+            self.rename_features = True
+
+    def build_feature(self, data: DataFrame) -> DataFrame:
+        transformed_data = [feature_builder(data) for feature_builder in self.feature_builders]
+        data_labels_np = transformed_data[0][self.feature_builders[0].get_label_names()].to_numpy()
+        data_features = [
+            feature_builder_data[feature_builder.get_feature_names()].to_numpy()
+            for feature_builder, feature_builder_data in zip(self.feature_builders, transformed_data)
+        ]
+        data_np = np.hstack([data_labels_np, *data_features])
+
+        return DataFrame(data=data_np, columns=self.get_label_names() + self.get_feature_names())
+
+    def get_one_word_description(self) -> str:
+        return "Concatenate"
+
+    def get_label_names(self) -> List[str]:
+        return self.feature_builders[0].get_label_names()
+
+    def get_feature_names(self) -> List[str]:
+        if self.rename_features:
+            total_feature_count = sum(
+                [len(feature_builder.get_feature_names()) for feature_builder in self.feature_builders]
             )
-            new_rows.append(new_row)
-    new_rows = np.array(new_rows)
+            feature_column_names = [f"c_{i}" for i in range(total_feature_count)]
+        else:
+            feature_column_names = [feature_builder.get_feature_names() for feature_builder in self.feature_builders]
+            feature_column_names = [
+                feature_name for feature_names in feature_column_names for feature_name in feature_names
+            ]
+        return feature_column_names
 
-    # Create the feature and label names
-    feature_names = [f"x_{n}" for n in range(combo_count * len(feature_columns))]
-    new_variable_columns = []
-    for i in range(combo_count):
-        new_variable_columns.append(*[f"{var} {i}" for var in variable_labels])
-    labels = fixed_labels + new_variable_columns
+    def _check_labels_are_same(self):
+        """
+        Check if the feature builders have the same labels. Returns True if all the labels are the same
+        """
+        # Make sure all the feautre builders have the same labels
+        labels = self.feature_builders[0].get_label_names()
+        for feature_builder in self.feature_builders[1:]:
+            if any([label not in feature_builder.get_label_names() for label in labels]):
+                return False
+        return True
 
-    return DataFrame(data=new_rows, columns=feature_names + labels), feature_names, labels
-
-
-def _build_perm_table(available_sizes: np.ndarray, combo_count: int, perm_or_comb: Literal["perm", "comb"]) -> Dict:
-    """Builds all possible pair permutations/combinations of indices for a given set of table lenghts and stores them
-    in a Look-up table.
-
-    Args:
-        available_sizes (np.ndarray): Available table sizes
-        combo_count(int) : How many rows to mix into a single row
-        perm_or_comb(Literal['perm', 'comb']) : Whether to use Permutation or Combination
-
-    Returns:
-        Dict: Permutation pair look-up Table with the format {table_len: [(ind1, ind2), (ind1, ind3), ...]}
-    """
-    # Sanity Check
-    # TODO: If the table length is smaller than combo_count, throw some sort of error
-    mixing_function = combinations if perm_or_comb == "comb" else permutations
-    perm_table = {}
-    for available_size in available_sizes:
-        perm_table[available_size] = np.array(list(mixing_function(range(available_size), combo_count)))
-    return perm_table
-
-
-def create_ratio(data: DataFrame, intensity_in_log: bool) -> Tuple[DataFrame, List[str], List[str]]:
-    """Create a Ratio feature from the simulation data
-    Ratio is always Wave Int 2 / Wave Int 1
-
-    Args:
-        data (DataFrame): Simulation data with "Intensity", "SDD" & "Wave Int" Columns.
-        intensity_in_log (bool): Is the intensity value in log? Fale for non-log/regular
-
-    Returns:
-        A new DataFrame with a new Ratio column & (Wave Int, SDD, Intensity) columns removed, Feature Names, Labels
-
-    """
-    # Create a ratio feature
-    wave1 = data[data["Wave Int"] == 1.0].reset_index()["Intensity"]
-    wave2 = data[data["Wave Int"] == 2.0].reset_index()["Intensity"]
-    if intensity_in_log:
-        ratio_feature = wave2 - wave1
-    else:
-        ratio_feature = wave2 / wave1
-
-    # Create a new df with only a single set of wave int
-    data_new = data[data["Wave Int"] == 1.0].drop(columns="Wave Int").reset_index()
-    data_new["Ratio"] = ratio_feature
-
-    # Pivot to bring ratio for all SDD into a column single
-    sim_param_columns = _get_sim_param_columns(data.columns)
-    data_new = pivot(data_new, index=sim_param_columns, columns=["SDD"], values="Ratio").reset_index()
-    # The new ratio columns created have the same name as the SDD value, type of int/float -> our features
-    # Python does not seem to like int/float column names -> convert to string first
-    feature_names = [str(col) for col in data_new.columns if _is_number(col)]
-    # Order: The pivot index comes first then the pivot values
-    data_new.columns = sim_param_columns + feature_names
-    return data_new, feature_names, sim_param_columns
-
-
-def create_spatial_intensity(data: DataFrame) -> Tuple[DataFrame, List[str], List[str]]:
-    """Creates 2 sets of spatial intensity features for each combination of simulation paramter
-    using simulation data. All the features are placed on the same row with column names waveint_sdd
-    (Example: 10_1.0)
-
-    Args:
-        data (DataFrame): Simulation data with "Intensity", "SDD" & "Wave Int" Columns.
-
-    Returns:
-        A new DataFrame with a new set of spatial intensity column & (Wave Int, SDD, Intensity) columns removed,
-        Feature Names, Labels
-    """
-    sim_param_columns = _get_sim_param_columns(data.columns)
-    data_new = pivot(data, index=sim_param_columns, columns=["SDD", "Wave Int"], values="Intensity").reset_index()
-    # Data is going to be multi indexed. Flatten the index
-    data_new.columns = ["_".join([str(col[0]), str(col[1])]) if col[1] != "" else col[0] for col in data_new.columns]
-    # Feature columns are columns that exist in [data_new] but not in sim_param_columns
-    feature_columns = [x for x in data_new.columns if x not in sim_param_columns]
-    return data_new, feature_columns, sim_param_columns
-
-
-def create_ratio_and_intensity(data: DataFrame, intensity_in_log: bool) -> Tuple[DataFrame, List[str], List[str]]:
-    """Creates spatial intensity & intensity ratio features for each combination of simulation paramter
-    using simulation data. All the features are placed on the same row with column names waveint_sdd
-    (Example: 10_1.0) for the spatial intensity and sdd (Example: 1.0) for the ratio.
-
-    Args:
-        data (DataFrame): Simulation data with "Intensity", "SDD" & "Wave Int" Columns.
-        intensity_in_log (bool): Is the intensity value in log? Fale for non-log/regular
-
-    Returns:
-        A new DataFrame with a new set of spatial intensity column & (Wave Int, SDD) columns removed, Feature Names,
-        Labels
-    """
-    sim_params = _get_sim_param_columns(data.columns)
-    data1, features1, _ = create_ratio(data, intensity_in_log)
-    data2, features2, _ = create_spatial_intensity(data)
-    data = merge(data1, data2, how="inner", on=sim_params)
-    return data, features1 + features2, sim_params
-
-
-def create_curve_fitting_param(data: DataFrame, weights: Tuple[float, float]) -> Tuple[DataFrame, List[str], List[str]]:
-    """Creates curve-fitting parameter features for each combination of simulation parameters using simulation data.
-    The features are named as alpha0_1, alpha1_1, ..., alpha0_2, ... in the resultant dataframe
-
-    Args:
-        data (DataFrame): Simulation data with "Intensity", "SDD" & "Wave Int" Columns.
-        weights (Tuple[float, float]): Weights passed on to "get_interpolate_fit_params" function
-
-    Returns:
-        A new DataFrame with a new set of spatial intensity column & (Wave Int, SDD, Intensity) columns removed and
-        alpha columns added, Feature Names, Labels
-    """
-    sim_params = _get_sim_param_columns(data.columns)
-    data1 = get_interpolate_fit_params(data, weights)
-    fitting_param_columns = list(filter(lambda X: "alpha" in X, data1.columns))
-    data1 = pivot(data1, index=sim_params, columns=["Wave Int"], values=fitting_param_columns).reset_index()
-    # Flatten the multi-index column
-    # Afterwards the fitting params should become: alpha0_1, alpha1_1, ..., alpha0_2, ...
-    data1.columns = ["_".join([str(col[0]), str(int(col[1]))]) if col[1] != "" else col[0] for col in data1.columns]
-    # The new feature columns  (fitting param columns) exist in the [data1.columns] but not in sim_params
-    feature_columns = [x for x in data1.columns if x not in sim_params]
-    return data1, feature_columns, sim_params
-
-
-def _get_sim_param_columns(column_names: Index) -> List:
-    result = column_names.drop(["SDD", "Intensity", "Wave Int"], errors="ignore")
-    return result.to_list()
-
-
-def _is_number(obj):
-    return isinstance(obj, (int, float))
+    def _check_features_are_unique(self):
+        """
+        Check if the feature builders have unique feature names
+        """
+        # Make sure all the feautre builders have the same labels
+        feature_names = self.feature_builders[0].get_feature_names()
+        for feature_builder in self.feature_builders[1:]:
+            if any([feature_name in feature_builder.get_feature_names() for feature_name in feature_names]):
+                return False
+        return True
