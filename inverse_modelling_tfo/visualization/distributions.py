@@ -46,8 +46,8 @@ def generate_model_error_and_prediction(
     # into memory issues)
     with torch.no_grad():
         for index, (x, y) in enumerate(data_loader):
-            predictions = labels_scaler.inverse_transform(model_cpu(x))
-            ground_truth = labels_scaler.inverse_transform(y)
+            predictions = labels_scaler.inverse_transform(model_cpu(x.cpu()))
+            ground_truth = labels_scaler.inverse_transform(y.cpu())
             error = error_func(predictions - ground_truth)
             # Store both the errors and predictions (in that order)
             left_pointer = index * batch_size

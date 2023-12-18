@@ -1,4 +1,5 @@
 from typing import List, Optional
+from sqlalchemy import over
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -167,31 +168,53 @@ class FeatureResidual(torch.nn.Module):
         closest_point_features = self.lookup_table[closest_point_index.view(-1, 1), self.feature_indices.view(1, -1)]
         return features - closest_point_features
 
+    def cpu(self):
+        super().cpu()
+        self.lookup_table = self.lookup_table.cpu()
+        self.lookup_key_indices = self.lookup_key_indices.cpu()
+        self.feature_indices = self.feature_indices.cpu()
+        return self
+
+    def cuda(self, device):
+        super().cuda(device)
+        self.lookup_table = self.lookup_table.cuda(device)
+        self.lookup_key_indices = self.lookup_key_indices.cuda(device)
+        self.feature_indices = self.feature_indices.cuda(device)
+        return self
+
+    def to(self, device):
+        super().to(device)
+        self.lookup_table = self.lookup_table.to(device)
+        self.lookup_key_indices = self.lookup_key_indices.to(device)
+        self.feature_indices = self.feature_indices.to(device)
+        return self
+
 
 class FeatureResidualNetwork(torch.nn.Module):
     """
-    Generates residuals based on the predicted key and the lookup table, then uses this residual to make a final 
-    predictions. 
-    
+    Generates residuals based on the predicted key and the lookup table, then uses this residual to make a final
+    predictions.
+
     The network consists of two separate sequential NNs connected at the center by a residual generator. The first NN
     predicts a set of intermediate labels. The lookup table is used to fetch the features closes to this label
     combination. The residual generator then generates the difference between the input features and the fetched
     features. This residual is then passed on to the second NN which makes the final prediction.
-    
+
     Arguments:
     --------
-    node_count_left: List[int] Node counts for the first NN. Its connected to the input on one side and a residual 
+    node_count_left: List[int] Node counts for the first NN. Its connected to the input on one side and a residual
     generator on the other side. The last element must be the number of intermediate features which are passed on to the
     residual network to make predictions. This would predict our intermediate labels/keys
     dropout_rates_left: List[float] Dropout rates for the first NN
     node_count_right: List[int] Node counts for the second NN connected to the residual generator on one side and the
-    output on the other side. The first element must be the number of intermediate labels/keys 
+    output on the other side. The first element must be the number of intermediate labels/keys
     dropout_rates_right: List[float] Dropout rates for the second NN
     lookup_table: 2d torch.Tensor Lookup table containing a set of features and labels, this table is used to look up
     the intermediate feature values at the predicted key(by the first/left NN)
     lookup_key_indices: 1d torch.Tensor Indices of the lookup table that correspond to the keys/intermediate lables
     feature_indices: 1d torch.Tensor Indices of the lookup table that correspond to the input features
     """
+
     def __init__(
         self,
         node_count_left: List[int],
@@ -221,3 +244,24 @@ class FeatureResidualNetwork(torch.nn.Module):
         path = self.feature_residual(path, x)
         path = self.right_nn(path)
         return path
+
+    def cpu(self):
+        super().cpu()
+        self.left_nn.cpu()
+        self.feature_residual.cpu()
+        self.right_nn.cpu()
+        return self
+
+    def cuda(self, device=None):
+        super().cuda(device)
+        self.left_nn.cuda(device)
+        self.feature_residual.cuda(device)
+        self.right_nn.cuda(device)
+        return self
+
+    def to(self, device):
+        super().to(device)
+        self.left_nn.to(device)
+        self.feature_residual.to(device)
+        self.right_nn.to(device)
+        return self
