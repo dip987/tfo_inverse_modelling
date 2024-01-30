@@ -30,9 +30,9 @@ class MuAGenerator:
         f_s_count: int,
         f_c_range: Tuple[float, float],
         f_c_count: int,
-        fetal_blood_volume_fraction: float,
-        maternal_blood_volume_fraction: float,
         wave_int: int,
+        fetal_blood_volume_fraction: float = 0.2,
+        maternal_blood_volume_fraction: float = 0.2,
     ) -> None:
         super().__init__()
         self.m_s = np.linspace(m_s_range[0], m_s_range[1], num=m_s_count, endpoint=True)
@@ -107,9 +107,9 @@ class ProximityMuAGenerator(MuAGenerator):
             f_s_count,
             f_c_range,
             f_c_count,
+            wave_int,
             fetal_blood_volume_fraction,
             maternal_blood_volume_fraction,
-            wave_int,
         )
         all_maternal_concs = [self.m_c.copy()]
         for fraction in maternal_proximity_fractions:

@@ -1,6 +1,7 @@
 """
 Function to generate optical propperties based on given parameters
 """
+from typing import Optional
 
 
 def get_tissue_mu_a(
@@ -8,6 +9,8 @@ def get_tissue_mu_a(
     hb_concentration: float,
     saturation: float,
     wave_int: int,
+    arterial_volume_fraction: Optional[float] = None,
+    venous_saturation_reduction_factor: float = 0.75,
 ) -> float:
     """
     Generate mu_a of a tissue layer based on given parameters (in mm^-1)
@@ -40,9 +43,11 @@ def get_tissue_mu_a(
     hb_concentration = hb_concentration * 10 / 64500  # in M/L
     # Notes: molar conc. is usually around 150/64500 M/L for regular human blood
 
-    arterial_volume_fraction = blood_volume_fraction / 2
-    venous_volume_fraction = blood_volume_fraction / 2
-    venous_saturation = saturation * 0.75  # Venous saturation is usually 75% of arterial saturation
+    if arterial_volume_fraction is None:
+        arterial_volume_fraction = blood_volume_fraction / 2
+
+    venous_volume_fraction = blood_volume_fraction - arterial_volume_fraction
+    venous_saturation = saturation * venous_saturation_reduction_factor
 
     # Use mu_a formula : mu_a = 2.303 * E * Molar Concentration
     mu_a_artery = (
@@ -56,6 +61,7 @@ def get_tissue_mu_a(
     mu_a = venous_volume_fraction * mu_a_venous + arterial_volume_fraction * mu_a_artery + base_tissue_mu_a  # in cm-1
     mu_a = mu_a / 10  # Conversion to mm-1
     return mu_a
+
 
 if __name__ == "__main__":
     print(get_tissue_mu_a(0.3, 12, 1.0, 1))

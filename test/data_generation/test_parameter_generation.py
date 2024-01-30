@@ -51,7 +51,7 @@ class MuAGeneratorTest(unittest.TestCase):
         )
         maternal_mu_a, _ = gen.generate()
         self.assertEqual(len(maternal_mu_a), m_s_count * m_c_count)
-    
+
     def test_proximity_mu_a_generator_fetal_mu_count(self):
         f_s_count = randint(1, 10)
         f_c_count = randint(1, 10)
@@ -66,8 +66,10 @@ class MuAGeneratorTest(unittest.TestCase):
             self.f_c_range,
             f_c_count,
             self.wave_int,
+            0.1,
+            0.1,
             proximity_fractions,
-            proximity_fractions
+            proximity_fractions,
         )
         _, fetal_mu_a = gen.generate()
         self.assertEqual(len(fetal_mu_a), f_s_count * f_c_count * (1 + len(proximity_fractions)))
@@ -86,8 +88,10 @@ class MuAGeneratorTest(unittest.TestCase):
             self.f_c_range,
             self.f_c_count,
             self.wave_int,
+            0.1,
+            0.1,
             proximity_fractions,
-            proximity_fractions
+            proximity_fractions,
         )
         maternal_mu_a, _ = gen.generate()
         self.assertEqual(len(maternal_mu_a), m_s_count * m_c_count * (1 + len(proximity_fractions)))

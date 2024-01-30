@@ -5,7 +5,6 @@ Visually test out what the interpolation results should look like
 
 from pathlib import Path
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 from inverse_modelling_tfo.data.intensity_interpolation import *
 from inverse_modelling_tfo.data.interpolation_function_zoo import *
@@ -18,7 +17,7 @@ equidistance_detector_normalization(data)
 
 # data = interpolate_exp(data, weights=(1.0, 0.6))
 data = interpolate_exp(
-    data, weights=(1.0, 0.8), interpolation_function=exp_piecewise_affine, break_indices=[8, 12, 16, 20]
+    data, weights=(1.0, 0.8), interpolation_function=exp_piecewise_affine, break_indices=[0, 3, 6, 9, 12, 20]
 )
 # len(break_indices) == piece_count - 1
 
