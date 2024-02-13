@@ -1,8 +1,8 @@
 import unittest
 
 import pandas as pd
-from inverse_modelling_tfo.models.validation_methods import CombineMethods, RandomSplit, HoldOneOut, CVSplit
-from inverse_modelling_tfo.features.build_features import create_curve_fitting_param
+from inverse_modelling_tfo.models.validation_methods import CombineMethods, RandomSplit, HoldOneOut
+from inverse_modelling_tfo.features.build_features_helpers import create_curve_fitting_param
 
 data = pd.read_pickle(
     r"/home/rraiyan/personal_projects/tfo_inverse_modelling/data/intensity/s_based_intensity_low_conc2.pkl"
