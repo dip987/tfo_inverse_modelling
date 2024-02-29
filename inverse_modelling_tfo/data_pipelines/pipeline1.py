@@ -31,7 +31,7 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_min_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
 
 # in_src = r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/dan_iccps_pencil.pkl'
@@ -73,7 +73,7 @@ data['FconcCenters'] = data['Fetal Hb Concentration'].round(fconc_rounding).map(
 # fitting_params['FconcCenters'] = data['FconcCenters']
 
 # Define Feature builders
-fb1 = FetalACbyDCFeatureBuilder('FconcCenters', 'comb', intensity_columns, labels, "max")
+fb1 = FetalACbyDCFeatureBuilder('FconcCenters', 'comb', intensity_columns, labels, "min")
 
 # Build features
 data = fb1(data)
@@ -85,7 +85,7 @@ data = fb1(data)
 config = {
     'labels' : fb1.get_label_names(),
     'features' : fb1.get_feature_names(),
-    'preprocessing_description' : "Detector Normalization -> Long to Wide -> AC by DC(comb, max)",
+    'preprocessing_description' : "Detector Normalization -> Long to Wide -> AC by DC(comb, min)",
     "comments": "Large range of fetal depths, from 1.0 cm to 4.8cm. Will be used to test if the range of depth is a \
     bottleneck for the model."
 }

@@ -1,6 +1,7 @@
 """
 Functions to load data processed through the data pipeline for downstream processing.
 """
+import json
 from pathlib import Path
 from typing import Tuple, List
 import pandas as pd
@@ -17,14 +18,24 @@ def load_pipeline_data(name: str) -> Tuple[List[str], List[str], pd.DataFrame]:
     config_file = data_base_path / f'{name}.json'
     data_path = data_base_path / f'{name}.pkl'
     
+    # Sanity Checks
+    if not config_file.exists():
+        raise FileNotFoundError(f'Config file for {name} not found at {config_file}')
+    if not data_path.exists():
+        raise FileNotFoundError(f'Data file for {name} not found at {data_path}')
+    
     # Setup the variable types
     features: List[str]
     labels: List[str]
     data: pd.DataFrame
     
-    # Put a type guard around the read_json and read_pickle functions
-    features = pd.read_json(config_file)['features'].tolist()
-    labels = pd.read_json(config_file)['labels'].to_list()
+    # Load configs
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+        features = config['features']
+        labels = config['labels']
+
+    # Load data
     data = pd.read_pickle(data_path)
     
     return features, labels, data
