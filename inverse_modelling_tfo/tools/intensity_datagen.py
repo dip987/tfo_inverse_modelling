@@ -39,7 +39,7 @@ if __name__ == '__main__':
             for m_mu_a in maternal_mu_a:
                 mu_map_active[1] = m_mu_a  # Change maternal mu a
                 mu_map_active[4] = f_mu_a  # Change fetal mu a
-                intensity_df = intensity_from_raw(file, mu_map_active)
+                intensity_df = intensity_from_raw(Path(file), mu_map_active)
                 num_rows = len(intensity_df)
                 intensity_df['Wave Int'] = wave_int * np.ones((num_rows, 1))
                 intensity_df['Uterus Thickness'] = uterus_thickness * np.ones((num_rows, 1))

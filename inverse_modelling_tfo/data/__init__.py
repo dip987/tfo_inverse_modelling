@@ -14,6 +14,7 @@ from inverse_modelling_tfo.data.intensity_interpolation import (
 from inverse_modelling_tfo.data.intensity_normalization import (
     equidistance_detector_normalization,
     constant_detector_count_normalization,
+    config_based_normalization,
     CONSTANT_DETECTOR_COUNT,
     EQUIDISTANCE_DETECTOR_COUNT,
     EQUIDISTANCE_DETECTOR_PHOTON_COUNT,
@@ -36,6 +37,7 @@ __all__ = [
     "interpolate_exp_transform",
     "equidistance_detector_normalization",
     "constant_detector_count_normalization",
+    "config_based_normalization",
     "CONSTANT_DETECTOR_COUNT",
     "EQUIDISTANCE_DETECTOR_COUNT",
     "EQUIDISTANCE_DETECTOR_PHOTON_COUNT",
