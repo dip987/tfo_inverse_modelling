@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -16,8 +16,6 @@ class SplitChannelCNN(nn.Module):
     Afterwards, they are connected to a set of linear layers with activations. The output length for
     each of these linear layers are supplied using [linear_array]
     """
-
-    # TODO: Currently only using a single conv layer. More might be necessary!
 
     def __init__(
         self,
@@ -305,16 +303,25 @@ class CNN1d(torch.nn.Module):
     ):
         """
         Args:
-            input_channels: List[int] Number of input channels for each of the convolution layers
-            output_channels: List[int] Number of output channels for each of the convolution layers
-            kernel_sizes: List[int] Kernel sizes for each of the convolution layers
-            paddings: List[int] Padding for each of the convolution layers. Defaults to None / padding = 1
-            strides: List[int] Strides for each of the convolution layers Defaults to None / stride = 1
-            dialations: List[int] Dialations for each of the convolution layers. Defaults to None / dialation = 1
+            input_channels: List[int] Number of input channels for each of the convolution layers. The length should be
+            the same as the number of layers
+            output_channels: List[int] Number of output channels for each of the convolution layers. The length should
+            be the same as the number of layers
+            kernel_sizes: List[int] Kernel sizes for each of the convolution layers. The length should be the same as
+            the number of layers
+            paddings: List[int] Padding for each of the convolution layers. Defaults to None / padding = 1. If set to
+            None, the padding is set to 1 for all layers. If set to a list, the length should be the same as the number
+            of layers. Defaults to None / padding = 1
+            strides: List[int] Strides for each of the convolution layers Defaults to None / stride = 1. If set to None,
+            the stride is set to 1 for all layers. If set to a list, the length should be the same as the number of
+            layers. Defaults to None / stride = 1
+            dialations: List[int] Dialations for each of the convolution layers. Defaults to None / dialation = 1. If
+            set to None, the dialation is set to 1 for all layers. If set to a list, the length should be the same as
+            the number of layers. Defaults to None / dialation = 1.
             dropouts: Optional[List[float]] Dropout rates for each of the convolution layers. Set this to None to
-            avoid Dropout Layers. (Analogous to setting dropout values to 0). Defaults to None / no dropout layer
+            avoid Dropout Layers. (Analogous to setting dropout values to 0). If provided, The length must be equal to
+            the number of layers. Defaults to None
         """
-        # TODO: Make the dropput=None have similar behavouir across all model creations
         # Sanity Check - Make sure all arguments are of the same length
         assert len(input_channels) == len(output_channels) == len(kernel_sizes), "All lists must be of the same length"
         if paddings is not None:
@@ -330,7 +337,7 @@ class CNN1d(torch.nn.Module):
         else:
             dialations = [1] * len(input_channels)
         if dropouts is not None:
-            assert len(dropouts) == len(input_channels) - 1, "Dropouts must be 1 less than the number of layers"
+            assert len(dropouts) == len(input_channels), "All lists must be of the same length"
 
         super().__init__()
         self.layers: List[nn.Module]
@@ -371,29 +378,36 @@ class FC2CNN(torch.nn.Module):
     of shape (batch_size, output_feature_size), where output_feature_size is the last element of the [cnn_node_counts]
     """
 
+    # TODO: There is a bug with odd numbered output layer count.
     def __init__(
         self,
         fc_node_counts: List[int],
-        fc_dropouts: List[float],
         cnn_node_counts: List[int],
         kernel_sizes: List[int],
+        fc_dropouts: Optional[List[float]] = None,
         cnn_dropouts: Optional[List[float]] = None,
+        final_layer: Literal["sigmoid", "tanh", "none"] = "none"
     ):
         """
         Args:
             fc_node_counts: List[int] Node counts for the fully connected layers. The first element is the number of
             inputs to the network, each consecutive number is the number of nodes(inputs) in each hidden layers.
-            fc_dropouts: List[float] Dropout rates for the fully connected layers. The length must be the 1 less than
-            the length of fc_node_counts
             cnn_node_counts: List[int] Output node counts for the CNN layers. The first element is the number of output
             layers for the first layer of CNN. It's input size is the same as the output size of the last FC layer. The
             padding is set accordingly to maintain the output size.
             kernel_sizes: List[int] Kernel sizes for each of the CNN layers. Must be the same length as cnn_node_counts
+            fc_dropouts: List[float] Dropout rates for the fully connected layers. The length must be the 1 less than
+            the length of fc_node_counts. Set this to None to avoid Dropout Layers. (Analogous to setting dropout values
+            to 0). Defaults to None / no dropout layer
             cnn_dropouts: List[float] Dropout rates for the CNN layers. Can be set to None to avoid having a dropout
             layer altogether. If provided, The length must be the same length as cnn_node_counts. Defaults to None
+            final_layer: Literal["sigmoid", "tanh", "none"]: The final layer of the network. Set to 'none' to have the 
+            network end with a convnet. Otherwise, the last layer is appeneded after the final conv layer. 
+            Defaults to "none"
         """
         # Sanity Check
-        assert len(fc_node_counts) - 1 == len(fc_dropouts), "fc_dropouts must be 1 less than fc_node_counts"
+        if fc_dropouts is not None:
+            assert len(fc_node_counts) - 1 == len(fc_dropouts), "fc_dropouts must be 1 less than fc_node_counts"
         assert len(cnn_node_counts) == len(kernel_sizes), "kernel_sizes must be the same length as cnn_node_counts"
         if cnn_dropouts is not None:
             assert len(cnn_node_counts) == len(cnn_dropouts), "cnn_dropouts must be the same length as cnn_node_counts"
@@ -415,8 +429,10 @@ class FC2CNN(torch.nn.Module):
             paddings=paddings.tolist(),
             dropouts=cnn_dropouts,
         )
-
-        self.layers = self.fc.layers + self.cnn.layers
+        final_layer_mapping = {"sigmoid": nn.Sigmoid(), "tanh": nn.Tanh(), "none": nn.Identity()}
+        self.final_layer = final_layer_mapping[final_layer]
+        
+        self.layers = self.fc.layers + self.cnn.layers + [self.final_layer]
 
     def forward(self, x):
-        return self.cnn(self.fc(x).unsqueeze(1))
+        return self.final_layer(self.cnn(self.fc(x).unsqueeze(1)))
