@@ -1,13 +1,14 @@
 """
 Process the simulated data and create proper features that can be passed onto the model
 """
+
 from abc import abstractmethod
 from typing import List, Literal
 from itertools import product
 from pandas import DataFrame
 import numpy as np
 from inverse_modelling_tfo.features.data_transformations import DataTransformation
-from .build_features_helpers import create_row_combos, _build_perm_table, TypePairing
+from .build_features_helpers import _build_perm_table, TypePairing
 
 
 # TODO: Move this to a config file
@@ -39,9 +40,26 @@ class FeatureBuilder(DataTransformation):
     @abstractmethod
     def from_chain(cls, chain: DataTransformation, *args, **kwargs) -> "FeatureBuilder":
         """
-        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. The chain's
-        transform/build_feature should be called during the class's own build_feature method (Preferably at the very
-        first line).
+        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. This passes the 
+        chain's labels and features to the new FeatureBuilder object automatically. Applying the new FeatureBuilder
+        will also apply all the transformations in the chain.
+        Example:
+        ----------
+        fb1 = FeatureBuilder1(..)
+        labels = fb1.get_label_names()  # DataTransformation method
+        features = fb1.get_feature_names()  # DataTransformation method
+        fb2 = FeatureBuilder2(labels, features, ..)
+        data = fb1(data)
+        data = fb2(data)
+        
+        This is analogous to:
+        fb1 = FeatureBuilder1(..)
+        fb2 = FeatureBuilder2.from_chain(fb1, ..)
+        data = fb2(data)
+        
+        
+        The chain's transform/build_feature should be called during the class's own build_feature method (Preferably 
+        at the very first line).
         """
 
     def transform(self, data: DataFrame) -> DataFrame:
@@ -69,6 +87,12 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
     Picks 2 rows and creates a new comination row. In this new row, the labels and features are concatenated
     (horizontally). You can define which features are kept constant and which feature will be permutated/combined to
     generate the pairs
+    Ordering of the columns in the new row:
+    - feature_columns
+    - fixed_labels
+    - variable_labels 1
+    - variable_labels 2
+
     """
 
     def __init__(
@@ -297,8 +321,8 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
             denominator_wv2 = denominator_func(term1_wv2, term2_wv2)
 
             # DO NOT Change this ordering
-            combination_data[_feature_names[i]] = numerator_wv1 / denominator_wv1
-            combination_data[_feature_names[i + detector_count]] = numerator_wv2 / denominator_wv2
+            combination_data[_feature_names[i]] = np.divide(numerator_wv1, denominator_wv1)
+            combination_data[_feature_names[i + detector_count]] = np.divide(numerator_wv2, denominator_wv2)
 
         # Clean-up intermediate columns
         combination_data.drop(columns=combination_feature_names, inplace=True)

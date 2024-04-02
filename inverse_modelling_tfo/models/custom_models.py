@@ -1,5 +1,4 @@
 from typing import List, Optional
-from sqlalchemy import over
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -124,21 +123,34 @@ class PerceptronDO(nn.Module):
 
 class PerceptronBD(nn.Module):
     """A Multi-Layer Fully-Connected Perceptron based on the array node counts with Batch Normalization and DropOut!
-    The first element is the number of inputs to the network, each consecutive number is the number
-    of nodes(inputs) in each hidden layers and the last element represents the number of outputs.
+    The first element is the number of inputs to the network, each consecutive number is the number of nodes(inputs)
+    in each hidden layers and the last element represents the number of outputs. The number of layers is 1 less than
+    the length of [node_counts]
+
+    The input should be a 2D tensor with the shape (batch_size, feature_size). The output would also be a 2D tensor of
+    shape (batch_size, output_feature_size), where output_feature_size is the last element of the [node_counts]
     """
 
     def __init__(self, node_counts: List[int], dropout_rates: Optional[List[float]] = None) -> None:
+        """
+        Args:
+            node_counts: List[int] Node counts for the fully connected layers. The first element is the number of
+            inputs to the network, each consecutive number is the number of nodes(inputs) in each hidden layers.
+            dropout_rates: Optional[List[float]] Dropout rates for the fully connected layers. The length must be the 1
+            less than the length of fc_node_counts. Set this to None to avoid Dropout Layers. (Analogous to setting
+            dropout values to 0). Defaults to None / no dropout layer
+        """
+        # Sanity Check
+        if dropout_rates is not None:
+            assert len(node_counts) - 1 == len(dropout_rates), "length of dropout_rates must be 1 less than node counts"
+        assert len(node_counts) > 1, "node_counts must have atleast 2 elements"
         super().__init__()
         self.layers: List[nn.Module]
-        if dropout_rates is None:
-            linear_layer_count = len(node_counts) - 1
-            dropout_layer_count = linear_layer_count - 1
-            dropout_rates = [0.5] * dropout_layer_count
         self.layers = [nn.Linear(node_counts[0], node_counts[1])]
         for index, count in enumerate(node_counts[1:-1], start=1):
             self.layers.append(nn.BatchNorm1d(count))
-            self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
+            if dropout_rates is not None:
+                self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
             self.layers.append(nn.ReLU())
             self.layers.append(nn.Linear(count, node_counts[index + 1]))
         self.layers.append(nn.Flatten())
@@ -150,6 +162,11 @@ class PerceptronBD(nn.Module):
 
 
 class FeatureResidual(torch.nn.Module):
+    """
+    The residual part of the FeatureResidualNetwork. This is not meant to be used as a stand-alone network. Use the
+    FeatureResidualNetwork instead.
+    """
+
     def __init__(self, lookup_table: torch.Tensor, lookup_key_indices: torch.Tensor, feature_indices: torch.Tensor):
         super().__init__()
         self.lookup_table = lookup_table
@@ -265,3 +282,141 @@ class FeatureResidualNetwork(torch.nn.Module):
         self.feature_residual.to(device)
         self.right_nn.to(device)
         return self
+
+
+class CNN1d(torch.nn.Module):
+    """
+    Create a fully convolutional neural network with 1D Convolutional Layers. Each convolution layer is followed by a
+    bacthnorm, dropout and a ReLU activation function. The final layer has a Flatten layer to convert the 3D tensor to a
+    2D tensor. The model is created using the nn.Sequential module.
+
+    The input should be a 3D tensor with the shape (batch_size, channels, sequence_length). The output would be a 2D
+    """
+
+    def __init__(
+        self,
+        input_channels: List[int],
+        output_channels: List[int],
+        kernel_sizes: List[int],
+        paddings: Optional[List[int]] = None,
+        strides: Optional[List[int]] = None,
+        dialations: Optional[List[int]] = None,
+        dropouts: Optional[List[float]] = None,
+    ):
+        """
+        Args:
+            input_channels: List[int] Number of input channels for each of the convolution layers
+            output_channels: List[int] Number of output channels for each of the convolution layers
+            kernel_sizes: List[int] Kernel sizes for each of the convolution layers
+            paddings: List[int] Padding for each of the convolution layers. Defaults to None / padding = 1
+            strides: List[int] Strides for each of the convolution layers Defaults to None / stride = 1
+            dialations: List[int] Dialations for each of the convolution layers. Defaults to None / dialation = 1
+            dropouts: Optional[List[float]] Dropout rates for each of the convolution layers. Set this to None to
+            avoid Dropout Layers. (Analogous to setting dropout values to 0). Defaults to None / no dropout layer
+        """
+        # TODO: Make the dropput=None have similar behavouir across all model creations
+        # Sanity Check - Make sure all arguments are of the same length
+        assert len(input_channels) == len(output_channels) == len(kernel_sizes), "All lists must be of the same length"
+        if paddings is not None:
+            assert len(paddings) == len(input_channels), "All lists must be of the same length"
+        else:
+            paddings = [1] * len(input_channels)
+        if strides is not None:
+            assert len(strides) == len(input_channels), "All lists must be of the same length"
+        else:
+            strides = [1] * len(input_channels)
+        if dialations is not None:
+            assert len(dialations) == len(input_channels), "All lists must be of the same length"
+        else:
+            dialations = [1] * len(input_channels)
+        if dropouts is not None:
+            assert len(dropouts) == len(input_channels) - 1, "Dropouts must be 1 less than the number of layers"
+
+        super().__init__()
+        self.layers: List[nn.Module]
+        self.layers = [
+            nn.Conv1d(input_channels[0], output_channels[0], kernel_sizes[0], strides[0], paddings[0], dialations[0])
+        ]
+        for index, count in enumerate(input_channels[1:], start=1):
+            self.layers.append(nn.BatchNorm1d(count))
+            if dropouts is not None:
+                self.layers.append(nn.Dropout1d(dropouts[index - 1]))
+            self.layers.append(nn.ReLU())
+            self.layers.append(
+                nn.Conv1d(
+                    count,
+                    output_channels[index],
+                    kernel_sizes[index],
+                    strides[index],
+                    paddings[index],
+                    dialations[index],
+                )
+            )
+        self.layers.append(nn.Flatten())
+        self.model = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class FC2CNN(torch.nn.Module):
+    """
+    A set of fully connected layers (with BatchNorm and Dropout) followed by a set of CNNs. The CNN part is modeled
+    after the UNET architecture.
+
+    The FC part consists of a set of fully connected layers with BatchNorm and Dropout with Relu. While the CNN part
+    consists of a set of Conv2d layers with BatchNorm and Dropout with a relu.
+
+    The input should be a 2D tensor with the shape (batch_size, feature_size). The output would also be a 2D tensor
+    of shape (batch_size, output_feature_size), where output_feature_size is the last element of the [cnn_node_counts]
+    """
+
+    def __init__(
+        self,
+        fc_node_counts: List[int],
+        fc_dropouts: List[float],
+        cnn_node_counts: List[int],
+        kernel_sizes: List[int],
+        cnn_dropouts: Optional[List[float]] = None,
+    ):
+        """
+        Args:
+            fc_node_counts: List[int] Node counts for the fully connected layers. The first element is the number of
+            inputs to the network, each consecutive number is the number of nodes(inputs) in each hidden layers.
+            fc_dropouts: List[float] Dropout rates for the fully connected layers. The length must be the 1 less than
+            the length of fc_node_counts
+            cnn_node_counts: List[int] Output node counts for the CNN layers. The first element is the number of output
+            layers for the first layer of CNN. It's input size is the same as the output size of the last FC layer. The
+            padding is set accordingly to maintain the output size.
+            kernel_sizes: List[int] Kernel sizes for each of the CNN layers. Must be the same length as cnn_node_counts
+            cnn_dropouts: List[float] Dropout rates for the CNN layers. Can be set to None to avoid having a dropout
+            layer altogether. If provided, The length must be the same length as cnn_node_counts. Defaults to None
+        """
+        # Sanity Check
+        assert len(fc_node_counts) - 1 == len(fc_dropouts), "fc_dropouts must be 1 less than fc_node_counts"
+        assert len(cnn_node_counts) == len(kernel_sizes), "kernel_sizes must be the same length as cnn_node_counts"
+        if cnn_dropouts is not None:
+            assert len(cnn_node_counts) == len(cnn_dropouts), "cnn_dropouts must be the same length as cnn_node_counts"
+
+        # Initialize Variables
+        super().__init__()
+        self.fc = PerceptronBD(fc_node_counts)
+        self.cnn_node_counts = torch.tensor(cnn_node_counts)
+        self.kernel_sizes = torch.tensor(kernel_sizes)
+
+        # Calculate the paddings for the CNN layers
+        cnn_input_size = torch.tensor([fc_node_counts[-1]] + cnn_node_counts[:-1])
+        paddings = (self.cnn_node_counts - cnn_input_size + self.kernel_sizes - 1) // 2
+
+        self.cnn = CNN1d(
+            input_channels=[1] * len(cnn_node_counts),
+            output_channels=[1] * len(cnn_node_counts),
+            kernel_sizes=kernel_sizes,
+            paddings=paddings.tolist(),
+            dropouts=cnn_dropouts,
+        )
+
+        self.layers = self.fc.layers + self.cnn.layers
+
+    def forward(self, x):
+        return self.cnn(self.fc(x).unsqueeze(1))

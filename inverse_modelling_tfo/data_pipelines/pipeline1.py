@@ -5,8 +5,6 @@ The purpose is to cut down on the time it takes to process the data and extract 
 
 from pathlib import Path
 import json
-from tokenize import group
-from webbrowser import get
 import pandas as pd
 from inverse_modelling_tfo.data_pipelines.fetal_conc_groups import dan_iccps_pencil1, generate_grouping_from_config
 from inverse_modelling_tfo.data import config_based_normalization
@@ -31,11 +29,12 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_min_long_range.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
 
-# in_src = r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/dan_iccps_pencil.pkl'
-in_src = Path(r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/weitai_data.pkl')
+# in_src = Path(r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/dan_iccps_pencil.pkl')
+in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/weitai_data.pkl")
 config_src = in_src.with_suffix(".json")
 
 fconc_rounding = 2
@@ -51,9 +50,9 @@ config_based_normalization(data, config_src)
 data = data.drop(columns="Uterus Thickness")
 
 # Interpolate intensity to remove noise
-# data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
-# data['Intensity'] = data['Interpolated Intensity']
-# data = data.drop(columns='Interpolated Intensity')
+data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
+data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
+data = data.drop(columns="Interpolated Intensity")  # Cleanup
 
 # Define data transformers
 data_transformer = LongToWideIntensityTransformation()
@@ -69,11 +68,40 @@ intensity_columns = data_transformer.get_feature_names()
 data.dropna(inplace=True)
 
 # Create fetal conc. grouping column - used for generating the AC component/which rows to choose for pairing
-data['FconcCenters'] = data['Fetal Hb Concentration'].round(fconc_rounding).map(grouping_map)
+data["FconcCenters"] = data["Fetal Hb Concentration"].round(fconc_rounding).map(grouping_map)
+labels = labels + ["FconcCenters"]  # This new column grouping should also be treated as a label
 # fitting_params['FconcCenters'] = data['FconcCenters']
 
 # Define Feature builders
-fb1 = FetalACbyDCFeatureBuilder('FconcCenters', 'comb', intensity_columns, labels, "min")
+# Create AC/DC using (I1 - I2)/max(I1, I2) or min(I1, I2)
+fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
+
+# Create AC/DC as log(I1)/log(I1)
+# Columns that stay the same between two combinations
+fixed_columns = [
+    "Maternal Wall Thickness",
+    "Maternal Hb Concentration",
+    "Maternal Saturation",
+    "Fetal Saturation",
+    "FconcCenters",
+]
+# Apply log
+# fb_log = LogTransformFeatureBuilder(intensity_columns, intensity_columns, labels)
+# data = fb_log(data)
+# fb0 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
+# Apply log(I2) / log(I1)
+# combinations_features = fb0.get_feature_names()
+# fb1 = TwoColumnOperationFeatureBuilder.from_chain(
+#     fb0,
+#     combinations_features[: len(combinations_features) // 2],
+#     combinations_features[len(combinations_features) // 2 :],
+#     "/",
+#     False,
+# )
+
+# Apply Row combinations - place the 2 sets of I's reponsbile for calculating AC along a single row
+# fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
+
 
 # Build features
 data = fb1(data)
@@ -83,16 +111,15 @@ data = fb1(data)
 # ==========================================================================================
 # NOT AUTOGENRATED! MUST BE DONE MANUALLY FOR EACH PIPELINE
 config = {
-    'labels' : fb1.get_label_names(),
-    'features' : fb1.get_feature_names(),
-    'preprocessing_description' : "Detector Normalization -> Long to Wide -> AC by DC(comb, min)",
-    "comments": "Large range of fetal depths, from 1.0 cm to 4.8cm. Will be used to test if the range of depth is a \
-    bottleneck for the model."
+    "labels": fb1.get_label_names(),
+    "features": fb1.get_feature_names(),
+    "preprocessing_description": "Detector Normalization -> Long to Wide -> Interpolation -> AC by DC (max)",
+    "comments": "Long range of Maternal Wall Thickness values, AC by DC using max(I1, I2)",
 }
 
 # Save data and config
 # ==========================================================================================
 data.to_pickle(out_dest)
-with open(config_dest, "w+") as outfile: 
+
+with open(config_dest, "w+", encoding="utf-8") as outfile:
     json.dump(config, outfile)
-    

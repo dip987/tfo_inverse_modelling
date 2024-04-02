@@ -72,7 +72,7 @@ class SimDataTransformation(DataTransformation):
 
 
 class LongToWideIntensityTransformation(SimDataTransformation):
-    """Transforms long format data to wide format data."""
+    """Transforms long format Intensity data to wide format by pivoting on the Wave Int and SDD columns"""
 
     def __init__(self):
         self.sim_param_columns = []
