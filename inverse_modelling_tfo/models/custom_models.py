@@ -286,7 +286,8 @@ class CNN1d(torch.nn.Module):
     """
     Create a fully convolutional neural network with 1D Convolutional Layers. Each convolution layer is followed by a
     bacthnorm, dropout and a ReLU activation function. The final layer has a Flatten layer to convert the 3D tensor to a
-    2D tensor. The model is created using the nn.Sequential module.
+    2D tensor. The model is created using the nn.Sequential module. The model has the same amount of layers as the 
+    length of the input_channels list. (All the input parameters should have the same length!)
 
     The input should be a 3D tensor with the shape (batch_size, channels, sequence_length). The output would be a 2D
     """
