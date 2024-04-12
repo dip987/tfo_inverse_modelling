@@ -29,12 +29,12 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_no_interp.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
 
-# in_src = Path(r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/dan_iccps_pencil.pkl')
-in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/weitai_data.pkl")
+in_src = Path(r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/dan_iccps_pencil.pkl')
+# in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/weitai_data.pkl")
 config_src = in_src.with_suffix(".json")
 
 fconc_rounding = 2
@@ -50,9 +50,9 @@ config_based_normalization(data, config_src)
 data = data.drop(columns="Uterus Thickness")
 
 # Interpolate intensity to remove noise
-data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
-data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
-data = data.drop(columns="Interpolated Intensity")  # Cleanup
+# data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
+# data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
+# data = data.drop(columns="Interpolated Intensity")  # Cleanup
 
 # Define data transformers
 data_transformer = LongToWideIntensityTransformation()
@@ -74,7 +74,7 @@ labels = labels + ["FconcCenters"]  # This new column grouping should also be tr
 
 # Define Feature builders
 # Create AC/DC using (I1 - I2)/max(I1, I2) or min(I1, I2)
-fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
+# fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
 
 # Create AC/DC as log(I1)/log(I1)
 # Columns that stay the same between two combinations
@@ -100,7 +100,7 @@ fixed_columns = [
 # )
 
 # Apply Row combinations - place the 2 sets of I's reponsbile for calculating AC along a single row
-# fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
+fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
 
 
 # Build features
@@ -113,8 +113,8 @@ data = fb1(data)
 config = {
     "labels": fb1.get_label_names(),
     "features": fb1.get_feature_names(),
-    "preprocessing_description": "Detector Normalization -> Long to Wide -> Interpolation -> AC by DC (max)",
-    "comments": "Long range of Maternal Wall Thickness values, AC by DC using max(I1, I2)",
+    "preprocessing_description": "Detector Normalization -> Long to Wide -> I2 and I1 Row Combination",
+    "comments": "No Interpolation - To check if interpolation was blurring out/killing far detector info! ",
 }
 
 # Save data and config
