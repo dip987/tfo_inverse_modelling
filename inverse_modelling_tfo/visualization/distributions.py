@@ -8,13 +8,14 @@ from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
 
+default_error_func = lambda x, y: np.abs(x - y)
 
 def generate_model_error_and_prediction(
     model: Module,
     data_loader: DataLoader,
     labels: List[str],
     labels_scaler,
-    error_func: Callable[[np.ndarray], np.ndarray] = np.abs,
+    error_func: Callable = default_error_func,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Given a Model and a corresponding DataLoader, generates 2 dataframes: one containing the absolute errors and one
@@ -48,7 +49,7 @@ def generate_model_error_and_prediction(
         for index, (x, y) in enumerate(data_loader):
             predictions = labels_scaler.inverse_transform(model_cpu(x.cpu()))
             ground_truth = labels_scaler.inverse_transform(y.cpu())
-            error = error_func(predictions - ground_truth)
+            error = error_func(predictions, ground_truth)
             # Store both the errors and predictions (in that order)
             left_pointer = index * batch_size
             right_pointer = left_pointer + len(x)

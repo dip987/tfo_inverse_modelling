@@ -29,7 +29,7 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_no_interp.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulastion_ratio.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
 
@@ -73,23 +73,25 @@ labels = labels + ["FconcCenters"]  # This new column grouping should also be tr
 # fitting_params['FconcCenters'] = data['FconcCenters']
 
 # Define Feature builders
+# Path 1
 # Create AC/DC using (I1 - I2)/max(I1, I2) or min(I1, I2)
-# fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
+fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
 
-# Create AC/DC as log(I1)/log(I1)
+# Path 2
+# Create AC/DC as log(I1)/log(I2)
 # Columns that stay the same between two combinations
-fixed_columns = [
-    "Maternal Wall Thickness",
-    "Maternal Hb Concentration",
-    "Maternal Saturation",
-    "Fetal Saturation",
-    "FconcCenters",
-]
-# Apply log
+# fixed_columns = [
+#     "Maternal Wall Thickness",
+#     "Maternal Hb Concentration",
+#     "Maternal Saturation",
+#     "Fetal Saturation",
+#     "FconcCenters",
+# ]
+# # Apply log
 # fb_log = LogTransformFeatureBuilder(intensity_columns, intensity_columns, labels)
 # data = fb_log(data)
 # fb0 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
-# Apply log(I2) / log(I1)
+# # Apply log(I2) / log(I1)
 # combinations_features = fb0.get_feature_names()
 # fb1 = TwoColumnOperationFeatureBuilder.from_chain(
 #     fb0,
@@ -99,8 +101,9 @@ fixed_columns = [
 #     False,
 # )
 
+# Path 3
 # Apply Row combinations - place the 2 sets of I's reponsbile for calculating AC along a single row
-fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
+# fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
 
 
 # Build features
@@ -113,8 +116,9 @@ data = fb1(data)
 config = {
     "labels": fb1.get_label_names(),
     "features": fb1.get_feature_names(),
-    "preprocessing_description": "Detector Normalization -> Long to Wide -> I2 and I1 Row Combination",
-    "comments": "No Interpolation - To check if interpolation was blurring out/killing far detector info! ",
+    "feature_builder_txt": str(fb1),
+    "preprocessing_description": "Detector Normalization -> Long to Wide -> Pulsation Ratio (Using max)",
+    "comments": "No Interpolation/pulsation ratio using the FetalACbyDCFeatureBuilder with max as the operation.",
 }
 
 # Save data and config

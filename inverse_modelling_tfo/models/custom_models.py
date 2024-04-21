@@ -576,47 +576,47 @@ class SplitChannelCNN(nn.Module):
         return x
 
 
-class SpatialReducer(nn.Module):
-    """
-    A network that reduces spatial features by taking averages. The reduces features are then connected to a regular
-    FC network complete with ReLU, BatchNorm and Dropout layers. The final layer is a linear layer with no activation.
+# class SpatialReducer(nn.Module):
+#     """
+#     A network that reduces spatial features by taking averages. The reduces features are then connected to a regular
+#     FC network complete with ReLU, BatchNorm and Dropout layers. The final layer is a linear layer with no activation.
 
-    The input should be a 2D tensor with the shape (batch_size, spatial_features). The output would also be a 2D tensor
-    """
+#     The input should be a 2D tensor with the shape (batch_size, spatial_features). The output would also be a 2D tensor
+#     """
 
-    def __init__(
-        self,
-        input_channels: int,
-        channel_length: int,
-        reduction_factors: List[int],
-        fc_output_nodes: List[int],
-        fc_dropouts: Optional[List[float]],
-    ):
-        """
-        Args:
-            input_channels: int Number of input channels
-            channel_length: int Length of each input channel
-            reduction_factors: List[int] List of reduction levels. Each memeber represents one reduction operation, where
-            the input length is reduced by that factor. The output of each reduction level is concatenated to the first
-            layer of the following FC network.
-            fc_output_counts: List[int] Node counts for the fully connected layers.
-            fc_dropouts: Optional[List[float]] Dropout rates for the fully connected layers. The length must be the 1 
-            less than the length of fc_node_counts. Set this to None to avoid Dropout Layers. (Analogous to setting 
-            dropout values to 0). Defaults to None / no dropout layer
-        """
-        # Sanity Check
-        assert len(fc_output_nodes) > 0, "fc_output_nodes must have atleast 1 element"
-        if fc_dropouts is not None:
-            assert len(fc_dropouts) == len(fc_output_nodes) - 1, "fc_dropouts must be 1 less than fc_output_nodes"
-        # Divisibility Check
-        for level in reduction_factors:
-            assert channel_length % level == 0, f"channel_length must be divisible by each element in reduction_factors"
+#     def __init__(
+#         self,
+#         input_channels: int,
+#         channel_length: int,
+#         reduction_factors: List[int],
+#         fc_output_nodes: List[int],
+#         fc_dropouts: Optional[List[float]],
+#     ):
+#         """
+#         Args:
+#             input_channels: int Number of input channels
+#             channel_length: int Length of each input channel
+#             reduction_factors: List[int] List of reduction levels. Each memeber represents one reduction operation, where
+#             the input length is reduced by that factor. The output of each reduction level is concatenated to the first
+#             layer of the following FC network.
+#             fc_output_counts: List[int] Node counts for the fully connected layers.
+#             fc_dropouts: Optional[List[float]] Dropout rates for the fully connected layers. The length must be the 1 
+#             less than the length of fc_node_counts. Set this to None to avoid Dropout Layers. (Analogous to setting 
+#             dropout values to 0). Defaults to None / no dropout layer
+#         """
+#         # Sanity Check
+#         assert len(fc_output_nodes) > 0, "fc_output_nodes must have atleast 1 element"
+#         if fc_dropouts is not None:
+#             assert len(fc_dropouts) == len(fc_output_nodes) - 1, "fc_dropouts must be 1 less than fc_output_nodes"
+#         # Divisibility Check
+#         for level in reduction_factors:
+#             assert channel_length % level == 0, f"channel_length must be divisible by each element in reduction_factors"
 
 
-        super().__init__()
-        self.reduction_levels = reduction_factors
-        self.reduction_layers = nn.ModuleList([nn.AvgPool1d(channel_length // level, channel_length // level, padding=0)  for level in reduction_factors])
-        self.fc = PerceptronBD(
-            [input_channels * len(reduction_factors) * len(reduction_factors)] + fc_node_counts, fc_dropouts
-        )
-        self.layers = self.reduction_layers + self.fc.layers
+#         super().__init__()
+#         self.reduction_levels = reduction_factors
+#         self.reduction_layers = nn.ModuleList([nn.AvgPool1d(channel_length // level, channel_length // level, padding=0)  for level in reduction_factors])
+#         self.fc = PerceptronBD(
+#             [input_channels * len(reduction_factors) * len(reduction_factors)] + fc_node_counts, fc_dropouts
+#         )
+#         self.layers = self.reduction_layers + self.fc.layers

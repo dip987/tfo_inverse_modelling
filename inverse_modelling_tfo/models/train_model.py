@@ -1,10 +1,16 @@
-from typing import Tuple, Optional, Dict, Callable, Type
-from copy import deepcopy
+from typing import Dict, Callable, Type
+from enum import Enum
 from ray import train
 from torch import nn
 import torch
 from torch.optim import SGD, Optimizer
 from torch.utils.data import DataLoader
+from inverse_modelling_tfo.data.data_loader import DATA_LOADER_INPUT_INDEX
+
+
+class ModelTrainerMode(Enum):
+    TRAIN = "train"
+    VALIDATE = "validate"
 
 
 class ModelTrainer:
@@ -34,6 +40,7 @@ class ModelTrainer:
         self.validation_loss = []
         self.combined_loss = []
         self.reporting = False
+        self.mode = ModelTrainerMode.TRAIN
         # Set Placeholder values during init, to be updated by the factory
         self.optimizer: Optimizer  # Initialized By Factory
         self.dataloader_gen_func_: Callable  # Initialized By factory
@@ -78,20 +85,17 @@ class ModelTrainer:
         for _ in range(self.epochs):  # loop over the dataset multiple times
             # Training Loop
             running_loss = 0.0
+            self.mode = ModelTrainerMode.TRAIN
             for data in self.train_loader:
-                # get the inputs; data is a list of [inputs, labels]
-                inputs, labels = data
-
                 # to CUDA
-                inputs = inputs.cuda()
-                labels = labels.cuda()
+                inputs = data[DATA_LOADER_INPUT_INDEX].cuda()
 
                 # zero the parameter gradients
                 self.optimizer.zero_grad()
 
                 # forward + backward + optimize
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
+                loss = self.criterion(outputs, data, self)
                 loss.backward()
                 self.optimizer.step()
 
@@ -100,19 +104,18 @@ class ModelTrainer:
             self.train_loss.append(running_loss / len(self.train_loader))
 
             # Validation Loop
+            self.mode = ModelTrainerMode.VALIDATE
             self.model = self.model.eval()
             running_loss = 0.0
             for data in self.validation_loader:
                 # get the inputs; data is a list of [inputs, labels]
-                inputs, labels = data
 
                 # to CUDA
-                inputs = inputs.cuda()
-                labels = labels.cuda()
+                inputs = data[DATA_LOADER_INPUT_INDEX].cuda()
 
                 with torch.no_grad():
                     outputs = self.model(inputs)
-                    loss = self.criterion(outputs, labels)
+                    loss = self.criterion(outputs, data, self)
 
                 # print statistics
                 running_loss += loss.item()
@@ -143,45 +146,3 @@ class ModelTrainer:
         Loss:
             Train Loss: {self.train_loss[-1]}
             Val. Loss: {self.validation_loss[-1]}"""
-
-
-class ModelTrainerFactory:
-    """
-    Contains the blueprint to create ModelTrainer(s). Call create() to get a new ModelTrainer
-
-    ## Notes
-    1. The train and val. dataloaders are created using dataloader_gen params during initialization. Be default, all
-    generated ModelTrainers have the same dataloader underneath to save memory. But that can be changed later on.
-
-    2. Each call to create() creates a new model using the model_class and model_params.
-    """
-
-    def __init__(
-        self,
-        model_class: Type,
-        model_gen_kargs: Dict,
-        dataloader_gen_func: Callable,
-        dataloader_gen_kargs: Dict,
-        epochs: int,
-        criterion,
-    ):
-        self.model_class = model_class
-        self.model_gen_kargs = model_gen_kargs
-        self.dataloader_gen_func = dataloader_gen_func
-        self.dataloader_gen_kargs = dataloader_gen_kargs
-        # Assert types (Because I don't know how to keep the inputs to the callable ambiguous, without using a
-        # protocol/ too lazy to do that)
-        self.train_loader: DataLoader
-        self.validation_loader: DataLoader
-        self.train_loader, self.validation_loader = dataloader_gen_func(**dataloader_gen_kargs)
-        self.epochs = epochs
-        self.criterion = criterion
-
-    def create(self) -> ModelTrainer:
-        """Creates a ModelTrainer based on the given blueprint"""
-        model = self.model_class(**self.model_gen_kargs)
-        trainer = ModelTrainer(model, self.train_loader, self.validation_loader, self.epochs, self.criterion)
-        trainer.dataloader_gen_func_ = self.dataloader_gen_func
-        # Make sure the individual models cannot change the original gen args
-        trainer.dataloader_gen_kargs_ = deepcopy(self.dataloader_gen_kargs)
-        return trainer

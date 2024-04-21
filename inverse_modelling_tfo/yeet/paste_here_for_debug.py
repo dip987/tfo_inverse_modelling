@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 import os
 from sklearn import preprocessing
+from inverse_modelling_tfo.data.data_loader_gen import generate_data_loaders
 from inverse_modelling_tfo.models import train_model, train_model_wtih_reporting, HoldOneOut
-from inverse_modelling_tfo.data import generate_data_loaders, equidistance_detector_normalization, constant_detector_count_normalization
+from inverse_modelling_tfo.data import equidistance_detector_normalization, constant_detector_count_normalization
 from inverse_modelling_tfo.data.intensity_interpolation import get_interpolate_fit_params_custom, interpolate_exp
 from inverse_modelling_tfo.data.interpolation_function_zoo import *
 from inverse_modelling_tfo.models import RandomSplit, ValidationMethod
