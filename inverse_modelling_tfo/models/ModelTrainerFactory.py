@@ -42,7 +42,7 @@ class ModelTrainerFactory:
         """Creates a ModelTrainer based on the given blueprint"""
         model = self.model_class(**self.model_gen_kargs)
         trainer = ModelTrainer(model, self.train_loader, self.validation_loader, self.epochs, self.criterion)
-        trainer.criterion.reset()   # Reset the loss tracker
+        trainer.loss_func.reset()   # Reset the loss tracker
         trainer.dataloader_gen_func_ = self.dataloader_gen_func
         # Make sure the individual models cannot change the original gen args
         trainer.dataloader_gen_kargs_ = deepcopy(self.dataloader_gen_kargs)

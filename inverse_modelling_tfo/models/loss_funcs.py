@@ -3,7 +3,8 @@ A set of custom loss function meant to be used with the ModelTrainer Class
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from re import L
+from typing import Dict, List, Optional
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 import torch
@@ -21,6 +22,7 @@ class LossTracker:
     """
 
     def __init__(self, loss_names: List[str]):
+        self.tracked_losses = loss_names
         # Set types for the dictionaries
         self.epoch_losses: Dict[str, List[float]]
         self.per_step_losses: Dict[str, List[float]]
@@ -75,7 +77,8 @@ class LossFunction(ABC):
         5. reset (optional)
     """
 
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None):
+        self.name = name
         self.loss_tracker: LossTracker
 
     @abstractmethod
@@ -96,12 +99,6 @@ class LossFunction(ABC):
         Return a string representation of the loss function
         """
 
-    @abstractmethod
-    def loss_tracker_step_update(self, *args):
-        """
-        Update the loss tracker with the current loss values. This should be called at the end of each __call__
-        """
-
     def loss_tracker_epoch_update(self, epoch_data_points_length: int) -> None:
         """
         Update the loss tracker for the current epoch. This is meant to be called at the end of each epoch by the
@@ -111,9 +108,15 @@ class LossFunction(ABC):
 
     def reset(self) -> None:
         """
-        Reset the loss tracker
+        Reset
         """
         self.loss_tracker = LossTracker(list(self.loss_tracker.epoch_losses.keys()))
+
+    @abstractmethod
+    def loss_tracker_epoch_ended(self, epoch_data_point_length: int) -> None:
+        """
+        Called at the end of the epoch to perform any necessary operations in the ModelTrainer
+        """
 
 
 class TorchLossWrapper(LossFunction):
@@ -126,30 +129,36 @@ class TorchLossWrapper(LossFunction):
         2.  val_loss
     """
 
-    def __init__(self, torch_loss_object):
+    def __init__(self, torch_loss_object, name: Optional[str] = None):
         """
         :param torch_loss_object: An initialized torch loss object
         """
-        super().__init__()
-        self.loss_tracker = LossTracker(["train_loss", "val_loss", "combined_loss"])
+        super().__init__(name)
+        if name is None:
+            self.loss_tracker = LossTracker(["train_loss", "val_loss"])
+        else:
+            self.loss_tracker = LossTracker([f"{name}_train_loss", f"{name}_val_loss"])
         self.loss_func = torch_loss_object
 
     def __call__(self, model_output, dataloader_data, trainer: ModelTrainer):
         loss = self.loss_func(model_output, dataloader_data[DATA_LOADER_LABEL_INDEX])
+
+        # Update internal loss tracker
         if trainer.mode == ModelTrainerMode.TRAIN:
-            self.loss_tracker.step_update("train_loss", loss.item())
+            loss_name = "train_loss"
         else:
-            self.loss_tracker.step_update("val_loss", loss.item())
+            loss_name = "val_loss"
+        if self.name is not None:
+            loss_name = f"{self.name}_{loss_name}"
+        self.loss_tracker.step_update(loss_name, loss.item())
+
         return loss
 
     def __str__(self) -> str:
         return f"Torch Loss Function: {self.loss_func}"
 
-    def loss_tracker_step_update(self, loss_name: str, loss_value: float):
-        """
-        Update the loss tracker with the current loss values
-        """
-        self.loss_tracker.step_update(loss_name, loss_value)
+    def loss_tracker_epoch_ended(self, epoch_data_point_length: int) -> None:
+        self.loss_tracker.epoch_update(epoch_data_point_length)
 
 
 class BLPathlengthLoss(LossFunction):
@@ -161,11 +170,15 @@ class BLPathlengthLoss(LossFunction):
     pathlength and mu_a difference. Then it compares it to the ground truth pulsation ratio. Minimizing this loss is
     equivalent to minimizing the error in the difference between these two terms.
 
-    This loss also expects the dataloader to have 3 outputs, where the extra data should contain the ground truth
-    pulsation ratios. The pulsation ratios should be unscaled.
+    This loss also expects the dataloader to have 3 outputs,
+        1. Model Input (could be anything, unrelated to the loss)
+        2. Labels (Again could be anything, unrelated to the loss)
+        3. Ground Truth Pulsation Ratios (Unscaled)
 
-    The loss also assumes that the pathlengths are scaled using a StandardScaler object. This is required to unscale the
-    pathlengths from the model's predictions onto the original scale.
+    The Model Predictions should include
+        1. Mu A at two different levels & Pathlengths (Both Scaled using a StandardScaler)
+
+    Note: Need to pass in the model output scaler(Which includes both mu_a and pathlength scalers) to the loss function
     """
 
     def __init__(
@@ -174,8 +187,9 @@ class BLPathlengthLoss(LossFunction):
         mu_a1_index: int,
         pathlength_indicies: List[int],
         pulsation_ratio_indicies: List[int],
-        pathlength_scaler,
+        model_output_scaler: StandardScaler,
         device: torch.device = torch.device("cuda"),
+        name: Optional[str] = None,
     ) -> None:
         """
         :param mu_a0_index: The index of the first mu_a in model's predictions columns
@@ -183,39 +197,99 @@ class BLPathlengthLoss(LossFunction):
         :param pathlength_indicies: The indices of the pathlengths in the model's predictions columns
         :param pulsation_ratio_indicies: The pulsation ratio indices in the data loader's extra data. (Note: The
         pulsation ratios should be unscaled)
-        :param pathlength_scaler: The StandardScaler object used to scale the pathlengths. This is required to unscale
-        the pathlengths from the model's predictions onto the original scale.
-        (Note: The pathlength_scaler should be an sklearn.preprocessing.StandardScaler object! But type enforcing is
-        giving me errors on the private attribute types. It will throw an error if any other Scaler is used!)
+        :param model_output_scaler: The scaler object used to scale the model's output. This will be used to unscale the
+        model's predictions to be able to compare them with the ground truth values
         :param device: The device to use for the calculations
 
+        (Note: The pathlength_scaler should be an sklearn.preprocessing.StandardScaler object! But type enforcing is
+        giving me errors on the private attribute types. It will throw an error if any other Scaler is used!)
         """
-        super().__init__()
+        super().__init__(name)
         # Ensure that pathlength_scaler is a StandardScaler object
-        assert isinstance(pathlength_scaler, StandardScaler), "pathlength_scaler should be a StandardScaler object!"
+        assert isinstance(model_output_scaler, StandardScaler), "pathlength_scaler should be a StandardScaler object!"
+        # Ensure index lengths are correct
+        assert len(pathlength_indicies) == len(pulsation_ratio_indicies), "Pathlength and Pulsation length Mismatch!"
 
-        # Convert the internal variables to cuda
-        self.pathlength_scaler_mean = torch.tensor(pathlength_scaler.mean_).to(device)
-        self.pathlength_scaler_scale = torch.tensor(pathlength_scaler.scale_).to(device)
+        self.mu_a0_index = mu_a0_index
+        self.mu_a1_index = mu_a1_index
+        self.pathlength_indicies = pathlength_indicies
+        self.pulsation_ratio_indicies = pulsation_ratio_indicies
+        self.device = device
 
-    def forward(self, prediction, targets):
-        pass
-        # Physics Term
-        # scaled_mua0 = targets[:, 0].reshape(-1, 1) * self.label_scaler_scale[0] + self.label_scaler_mean[0]
-        # scaled_mua1 = targets[:, 1].reshape(-1, 1) * self.label_scaler_scale[1] + self.label_scaler_mean[1]
-        # predicted_del_mu_a = scaled_mua1 - scaled_mua0  # Mua1 - Mua0
-        # predicted_avg_L = prediction[:, 2:] * self.label_scaler_scale[2:] + self.label_scaler_mean[2:]
-        # predicted_bl_term = predicted_del_mu_a * predicted_avg_L / 100  # Somehow we ended up with a factor of 100 here
-        # # TODO: Probably figure out how that came to be!
-        # target_pulsation_ratios = targets[:, self.output_labels_len :]
-        # target_pulsation_ratios = self.pathlength_scaler_scale * target_pulsation_ratios + self.pathlength_scaler_mean
-        # # Assuming the pulsation ratios are the same as the BL terms
-        # bl_loss = self.label_loss(target_pulsation_ratios, predicted_bl_term)
+        # Convert the Scaler to device(cuda/cpu)
+        scaler_mean = torch.tensor(model_output_scaler.mean_).to(device)
+        scaler_scale = torch.tensor(model_output_scaler.scale_).to(device)
+        self.pathlength_mean = torch.index_select(scaler_mean, 0, torch.tensor(pathlength_indicies).to(device))
+        self.pathlength_scale = torch.index_select(scaler_scale, 0, torch.tensor(pathlength_indicies).to(device))
+        self.mu_a0_mean = scaler_mean[mu_a0_index]
+        self.mu_a0_scale = scaler_scale[mu_a0_index]
+        self.mu_a1_mean = scaler_mean[mu_a1_index]
 
-        # # Label Loss - How good is the model at predicting the given labels
-        # target_labels = targets[:, : self.output_labels_len]
-        # label_loss = self.label_loss(prediction, target_labels)
+        # Initialize and Underlying MSE Loss
+        self.loss_func = TorchLossWrapper(torch.nn.MSELoss())
+        self.loss_tracker = self.loss_func.loss_tracker  # Act as a wrapper around the underlying loss tracker
 
-        # # Total Loss
-        # total_loss = self.label_loss_weight * label_loss + self.bl_loss_weight * bl_loss
-        # return total_loss
+    def __call__(self, model_output, dataloader_data, trainer) -> torch.Tensor:
+        ground_truth_pulsation_ratios = dataloader_data[DATA_LOADER_EXTRA_INDEX][:, self.pulsation_ratio_indicies]
+        # Unscale the model output
+        unscaled_pathlength = model_output[:, self.pathlength_indicies] * self.pathlength_scale + self.pathlength_mean
+        unscaled_mu_a0 = model_output[:, self.mu_a0_index] * self.mu_a0_scale + self.mu_a0_mean
+        unscaled_mu_a1 = model_output[:, self.mu_a1_index] * self.mu_a0_scale + self.mu_a0_mean
+        # Calculate the predicted pulsation ratios
+        predicted_del_mu_a = unscaled_mu_a1 - unscaled_mu_a0
+        predicted_bl_term = predicted_del_mu_a * unscaled_pathlength / 100  # Somehow we ended up with a 100x factor
+
+        # Calculate the loss
+        loss = self.loss_func(predicted_bl_term, [0, ground_truth_pulsation_ratios], trainer)
+        return loss
+
+    def __str__(self) -> str:
+        return "Beer-Lamberts Law based Physics loss comparing the predicted pulsation ratio to the ground truth(using \
+            the pathlengths and mu_a values)"
+
+    def loss_tracker_epoch_ended(self, epoch_data_point_length: int) -> None:
+        self.loss_tracker.epoch_update(epoch_data_point_length)
+
+
+class SumLoss(LossFunction):
+    """
+    Sum of two loss functions
+
+    Special note: The name of the independent losses tracked inside each LossFunction needs to unique between all losses
+    being summed
+    """
+
+    def __init__(self, loss_funcs: List[LossFunction], weights: List[float], name: Optional[str] = None):
+        super().__init__(name)
+        # Check validitiy of the loss names
+        all_names = []
+        for loss_func in loss_funcs:
+            all_names = all_names + list(loss_func.loss_tracker.epoch_losses.keys())
+        # must be unique
+        assert len(all_names) == len(set(all_names)), "Loss function names should be unique!"
+
+        # Check validity of the weights
+        assert len(loss_funcs) == len(weights), "Number of loss functions and weights should match!"
+
+        self.loss_funcs = loss_funcs
+        self.weights = weights
+        self.loss_tracker = LossTracker(all_names)
+
+    def __call__(self, model_output, dataloader_data, trainer) -> torch.Tensor:
+        loss = torch.tensor(0.0).to(model_output.device)  # Assuming everything is on the same device
+        for loss_func, weight in zip(self.loss_funcs, self.weights):
+            loss += weight * loss_func(model_output, dataloader_data, trainer)
+        # Copy the losses from the underlying loss functions to the sum loss
+        for loss_func in self.loss_funcs:
+            for loss_name, loss_values in loss_func.loss_tracker.per_step_losses.items():
+                self.loss_tracker.per_step_losses[loss_name] = loss_values
+        return loss
+
+    def __str__(self) -> str:
+        return "Sum of multiple loss functions"
+
+    def loss_tracker_epoch_ended(self, epoch_data_point_length: int) -> None:
+        # Call epoch ended for all underlying losses
+        for loss_func in self.loss_funcs:
+            loss_func.loss_tracker_epoch_ended(epoch_data_point_length)
+        self.loss_tracker.epoch_update(epoch_data_point_length)

@@ -35,7 +35,8 @@ class ModelTrainer:
         self.train_loader = train_loader
         self.validation_loader = validation_loader
         self.epochs = epochs
-        self.criterion = criterion
+        self.loss_func = criterion
+        self.loss_tracker = self.loss_func.loss_tracker
         self.train_loss = []
         self.validation_loss = []
         self.combined_loss = []
@@ -95,13 +96,14 @@ class ModelTrainer:
 
                 # forward + backward + optimize
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, data, self)
+                loss = self.loss_func(outputs, data, self)
                 loss.backward()
                 self.optimizer.step()
 
                 # print statistics
                 running_loss += loss.item()
             self.train_loss.append(running_loss / len(self.train_loader))
+            self.loss_func.loss_tracker_epoch_ended(len(self.train_loader))
 
             # Validation Loop
             self.mode = ModelTrainerMode.VALIDATE
@@ -115,11 +117,12 @@ class ModelTrainer:
 
                 with torch.no_grad():
                     outputs = self.model(inputs)
-                    loss = self.criterion(outputs, data, self)
+                    loss = self.loss_func(outputs, data, self)
 
                 # print statistics
                 running_loss += loss.item()
             self.validation_loss.append(running_loss / len(self.validation_loader))
+            self.loss_func.loss_tracker_epoch_ended(len(self.validation_loader))
 
             # Update Combined Loss
             self.combined_loss.append(self.validation_loss[-1] * self.train_loss[-1])
