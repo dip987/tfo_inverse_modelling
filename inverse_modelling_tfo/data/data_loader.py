@@ -25,9 +25,15 @@ class CustomDataset(Dataset):
     PS: This does not shuffle the dataset. Set shuffle to True during training for best results
     """
 
-    def __init__(self, table: pd.DataFrame, x_columns: List[str], y_columns: List[str]):
+    def __init__(
+        self,
+        table: pd.DataFrame,
+        x_columns: List[str],
+        y_columns: List[str],
+        device: torch.device = torch.device("cuda"),
+    ):
         super().__init__()
-        self.table = torch.Tensor(table.values.astype(float))
+        self.table = torch.Tensor(table.values.astype(float)).to(device)
         self.row_ids = np.arange(0, len(table), 1)
         self.x_columns = [table.columns.get_loc(x) for x in x_columns]
         self.y_columns = [table.columns.get_loc(x) for x in y_columns]
@@ -51,9 +57,16 @@ class TripleOutputDataset(Dataset):
     # NOTE: This is basically unused as of now
     """
 
-    def __init__(self, table: pd.DataFrame, x_columns: List[str], y_columns: List[str], extra_columns: List[str]):
+    def __init__(
+        self,
+        table: pd.DataFrame,
+        x_columns: List[str],
+        y_columns: List[str],
+        extra_columns: List[str],
+        device: torch.device = torch.device("cuda"),
+    ):
         super().__init__()
-        self.table = torch.Tensor(table.values.astype(float))
+        self.table = torch.Tensor(table.values.astype(float)).to(device)
         self.row_ids = np.arange(0, len(table), 1)
         self.x_columns = [table.columns.get_loc(x) for x in x_columns]
         self.y_columns = [table.columns.get_loc(x) for x in y_columns]
@@ -86,6 +99,7 @@ class DifferentialCombinationDataset(Dataset):
         total_length: int,
         allow_zero_diff: bool = True,
     ):
+        # TODO: Unlike other datasets, this one does not move the data to a torch Tensor. Making this very slow!
         super().__init__()
         self.allow_zero_diff = allow_zero_diff
         temp_table = table.groupby(fixed_columns)

@@ -7,6 +7,7 @@ from torch.nn import Module
 from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
+from inverse_modelling_tfo.data.data_loader import DATA_LOADER_INPUT_INDEX, DATA_LOADER_LABEL_INDEX
 
 default_error_func = lambda x, y: np.abs(x - y)
 
@@ -46,9 +47,11 @@ def generate_model_error_and_prediction(
     # Go through the data one batch at a time (This prevents loading the entire data at once and possibly running
     # into memory issues)
     with torch.no_grad():
-        for index, (x, y) in enumerate(data_loader):
-            predictions = labels_scaler.inverse_transform(model_cpu(x.cpu()))
-            ground_truth = labels_scaler.inverse_transform(y.cpu())
+        for index, data in enumerate(data_loader):
+            x = data[DATA_LOADER_INPUT_INDEX].cpu()     # Numpy operations require the data to be on the CPU
+            y = data[DATA_LOADER_LABEL_INDEX].cpu()    # Numpy operations require the data to be on the CPU
+            predictions = labels_scaler.inverse_transform(model_cpu(x))
+            ground_truth = labels_scaler.inverse_transform(y)
             error = error_func(predictions, ground_truth)
             # Store both the errors and predictions (in that order)
             left_pointer = index * batch_size
