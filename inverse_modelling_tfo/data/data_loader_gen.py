@@ -5,8 +5,9 @@ Generate data loaders for training and validation datasets
 from typing import Dict, List, Tuple
 import pandas as pd
 from torch.utils.data import DataLoader
+import torch
 from inverse_modelling_tfo.data.data_loader import CustomDataset, TripleOutputDataset
-from inverse_modelling_tfo.models.validation_methods import RandomSplit, ValidationMethod
+from inverse_modelling_tfo.model_training.validation_methods import RandomSplit, ValidationMethod
 
 
 def generate_data_loader_triple_output(
@@ -16,6 +17,7 @@ def generate_data_loader_triple_output(
     y_columns: List[str],
     extra_columns: List[str],
     validation_method: ValidationMethod = RandomSplit(0.8),
+    device: torch.device = torch.device("cuda"),
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Args:
@@ -35,8 +37,8 @@ def generate_data_loader_triple_output(
     train_table, validation_table = validation_method.split(table)
 
     # Create the datasets
-    training_dataset = TripleOutputDataset(train_table, x_columns, y_columns, extra_columns)
-    validation_dataset = TripleOutputDataset(validation_table, x_columns, y_columns, extra_columns)
+    training_dataset = TripleOutputDataset(train_table, x_columns, y_columns, extra_columns, device)
+    validation_dataset = TripleOutputDataset(validation_table, x_columns, y_columns, extra_columns, device)
 
     # Create the data loaders
     train_loader = DataLoader(training_dataset, **data_loader_params)
@@ -51,6 +53,7 @@ def generate_data_loaders(
     x_columns: List[str],
     y_columns: List[str],
     validation_method: ValidationMethod = RandomSplit(0.8),
+    device: torch.device = torch.device("cuda"),
 ) -> Tuple[DataLoader, DataLoader]:
     """Convenience function. Creates a shuffled training and validation data loader with the given
     params using a given Dataframe. Pass in which column names should be included as features and
@@ -82,8 +85,8 @@ def generate_data_loaders(
     train_table, validation_table = validation_method.split(table)
 
     # Create the datasets
-    training_dataset = CustomDataset(train_table, x_columns, y_columns)
-    validation_dataset = CustomDataset(validation_table, x_columns, y_columns)
+    training_dataset = CustomDataset(train_table, x_columns, y_columns, device)
+    validation_dataset = CustomDataset(validation_table, x_columns, y_columns, device)
 
     # Create the data loaders
     train_loader = DataLoader(training_dataset, **data_loader_params)

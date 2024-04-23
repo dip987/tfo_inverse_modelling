@@ -1,6 +1,6 @@
 import unittest
 import torch
-from inverse_modelling_tfo.models.custom_models import FeatureResidualNetwork
+from inverse_modelling_tfo.model_training.custom_models import FeatureResidualNetwork
 
 
 class TestFeatureResidualNetowrk(unittest.TestCase):

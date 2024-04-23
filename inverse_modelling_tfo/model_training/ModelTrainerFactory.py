@@ -2,8 +2,8 @@ from typing import Callable, Dict, Type
 from copy import deepcopy
 
 from torch.utils.data import DataLoader
-from inverse_modelling_tfo.models.train_model import ModelTrainer
-from inverse_modelling_tfo.models.loss_funcs import LossFunction
+from inverse_modelling_tfo.model_training.train_model import ModelTrainer
+from inverse_modelling_tfo.model_training.loss_funcs import LossFunction
 
 
 class ModelTrainerFactory:

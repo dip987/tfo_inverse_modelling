@@ -1,7 +1,7 @@
 import unittest
 
 import pandas as pd
-from inverse_modelling_tfo.models.validation_methods import CombineMethods, RandomSplit, HoldOneOut
+from inverse_modelling_tfo.model_training.validation_methods import CombineMethods, RandomSplit, HoldOneOut
 from inverse_modelling_tfo.features.build_features_helpers import create_curve_fitting_param
 
 data = pd.read_pickle(

@@ -4,10 +4,10 @@ import numpy as np
 import torch
 from torch.nn import MSELoss
 from sklearn.preprocessing import StandardScaler
-from inverse_modelling_tfo.models.custom_models import PerceptronBD
-from inverse_modelling_tfo.models.train_model import ModelTrainer
+from inverse_modelling_tfo.model_training.custom_models import PerceptronBD
+from inverse_modelling_tfo.model_training.train_model import ModelTrainer
 from inverse_modelling_tfo.data import generate_data_loaders
-from inverse_modelling_tfo.models.loss_funcs import LossTracker, BLPathlengthLoss, SumLoss, TorchLossWrapper
+from inverse_modelling_tfo.model_training.loss_funcs import LossTracker, BLPathlengthLoss, SumLoss, TorchLossWrapper
 
 
 class TestLostTracker(unittest.TestCase):
