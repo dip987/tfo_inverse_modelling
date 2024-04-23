@@ -5,13 +5,11 @@ This module contains the classes and functions to create, train and validate mod
 
 """
 
-from .train_model import ModelTrainer
+from .ModelTrainer import ModelTrainer
 from .validation_methods import ValidationMethod, RandomSplit, CVSplit, HoldOneOut, CombineMethods
 from .loss_funcs import TorchLossWrapper, SumLoss, BLPathlengthLoss
-from .ModelTrainerFactory import ModelTrainerFactory
 
 __all__ = [
-    "ModelTrainerFactory",
     "ModelTrainer",
     "ValidationMethod",
     "RandomSplit",

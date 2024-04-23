@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 import torch
-from inverse_modelling_tfo.data.data_loader import (
+from inverse_modelling_tfo.data.datasets import (
     DATA_LOADER_LABEL_INDEX,
     DATA_LOADER_INPUT_INDEX,
     DATA_LOADER_EXTRA_INDEX,

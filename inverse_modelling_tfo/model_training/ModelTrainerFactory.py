@@ -1,8 +1,10 @@
+"""
+Deprecated
+"""
+
 from typing import Callable, Dict, Type
-from copy import deepcopy
 
 from torch.utils.data import DataLoader
-from inverse_modelling_tfo.model_training.train_model import ModelTrainer
 from inverse_modelling_tfo.model_training.loss_funcs import LossFunction
 
 
@@ -37,13 +39,3 @@ class ModelTrainerFactory:
         self.train_loader, self.validation_loader = dataloader_gen_func(**dataloader_gen_kargs)
         self.epochs = epochs
         self.criterion = criterion
-
-    def create(self) -> ModelTrainer:
-        """Creates a ModelTrainer based on the given blueprint"""
-        model = self.model_class(**self.model_gen_kargs)
-        trainer = ModelTrainer(model, self.train_loader, self.validation_loader, self.epochs, self.criterion)
-        trainer.loss_func.reset()   # Reset the loss tracker
-        trainer.dataloader_gen_func_ = self.dataloader_gen_func
-        # Make sure the individual models cannot change the original gen args
-        trainer.dataloader_gen_kargs_ = deepcopy(self.dataloader_gen_kargs)
-        return trainer

@@ -7,7 +7,7 @@ from torch.nn import Module
 from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
-from inverse_modelling_tfo.data.data_loader import DATA_LOADER_INPUT_INDEX, DATA_LOADER_LABEL_INDEX
+from inverse_modelling_tfo.data.datasets import DATA_LOADER_INPUT_INDEX, DATA_LOADER_LABEL_INDEX
 
 default_error_func = lambda x, y: np.abs(x - y)
 

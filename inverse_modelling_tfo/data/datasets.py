@@ -28,58 +28,47 @@ class CustomDataset(Dataset):
     def __init__(
         self,
         table: pd.DataFrame,
-        x_columns: List[str],
-        y_columns: List[str],
+        columns_directory: List[List[str]],
         device: torch.device = torch.device("cuda"),
     ):
+        """
+        Custom torch dataset object. Meant to be used with a dataloader on top of it.
+        Args:
+            table (pd.DataFrame): Data in the form of a Pandas Dataframe
+            columns_directory (List[List[str]]): the columns used from the table to create each iterable component of
+            the dataset. Each set of columns gets treated as single element in the __getitem__ method
+            device (torch.device): Device to move the data to (Should usually be cuda for GPU training)
+
+        Note: The data is always saved as a torch float32 tensor!
+
+        Example:
+            columns_directory = [['x1', 'x2'], ['y1', 'y2']]
+            table = pd.DataFrame({'x1': [1, 2, 3], 'x2': [4, 5, 6], 'y1': [7, 8, 9], 'y2': [10, 11, 12]})
+            dataset = CustomDataset(table, columns_directory)
+
+            # The created dataset will return the following when iterated over
+            print(dataset[0])
+            -> ([1, 4], [7, 10])
+            # Two separate lists, one composed of x1 and x2, the other composed of y1 and y2, returned as a tuple
+        """
         super().__init__()
+        # Sanity Check
+        assert len(columns_directory) > 0, "No columns to use in the dataset"
+        assert all([len(x) > 0 for x in columns_directory]), "Empty columns in the columns_directory"
+        assert all([x in table.columns for y in columns_directory for x in y]), "Column not found in the table"
+
         self.table = torch.Tensor(table.values.astype(float)).to(device)
         self.row_ids = np.arange(0, len(table), 1)
-        self.x_columns = [table.columns.get_loc(x) for x in x_columns]
-        self.y_columns = [table.columns.get_loc(x) for x in y_columns]
+        # Convert the column names to indices - since we are using torch tensors instead of pandas dataframes
+        self.columns_directory = []
+        for columns in columns_directory:
+            self.columns_directory.append([table.columns.get_loc(x) for x in columns])
 
     def __len__(self):
         return len(self.row_ids)
 
     def __getitem__(self, item):
-        predictors = self.table[item, self.x_columns]
-        target = self.table[item, self.y_columns]
-        return predictors, target
-
-
-class TripleOutputDataset(Dataset):
-    """
-    Special dataset that returns three separate outputs. This is useful when the loss function requires additional terms
-    which are not included in the model labels. For example, in physics-based loss functions with an extra physics
-    regressor term.
-
-    Output Format: (predictors, target, extra)
-    # NOTE: This is basically unused as of now
-    """
-
-    def __init__(
-        self,
-        table: pd.DataFrame,
-        x_columns: List[str],
-        y_columns: List[str],
-        extra_columns: List[str],
-        device: torch.device = torch.device("cuda"),
-    ):
-        super().__init__()
-        self.table = torch.Tensor(table.values.astype(float)).to(device)
-        self.row_ids = np.arange(0, len(table), 1)
-        self.x_columns = [table.columns.get_loc(x) for x in x_columns]
-        self.y_columns = [table.columns.get_loc(x) for x in y_columns]
-        self.extra_columns = [table.columns.get_loc(x) for x in extra_columns]
-
-    def __len__(self):
-        return len(self.row_ids)
-
-    def __getitem__(self, item):
-        predictors = self.table[item, self.x_columns]
-        target = self.table[item, self.y_columns]
-        extra = self.table[item, self.extra_columns]
-        return predictors, target, extra
+        return tuple([self.table[item, x] for x in self.columns_directory])
 
 
 class DifferentialCombinationDataset(Dataset):
