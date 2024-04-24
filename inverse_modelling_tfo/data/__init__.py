@@ -1,9 +1,7 @@
 from inverse_modelling_tfo.data.normalize_data import normalize_zero_one, normalize_zero_mean
-from inverse_modelling_tfo.data.data_loader import (
+from inverse_modelling_tfo.data.datasets import (
     CustomDataset,
-    generate_data_loaders,
     DifferentialCombinationDataset,
-    generate_differential_data_loaders,
 )
 from inverse_modelling_tfo.data.generate_intensity import intensity_from_raw, intensity_from_distribution
 from inverse_modelling_tfo.data.intensity_interpolation import (
@@ -28,8 +26,6 @@ __all__ = [
     "normalize_zero_one",
     "CustomDataset",
     "DifferentialCombinationDataset",
-    "generate_data_loaders",
-    "generate_differential_data_loaders",
     "intensity_from_raw",
     "intensity_from_distribution",
     "get_interpolate_fit_params",

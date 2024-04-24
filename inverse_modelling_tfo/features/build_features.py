@@ -11,7 +11,7 @@ from inverse_modelling_tfo.features.data_transformations import DataTransformati
 from .build_features_helpers import _build_perm_table, TypePairing
 
 
-# TODO: Move this to a config file
+# TODO: There is a naming inconsistency in the code. Some places have the detector index, some use its SDD. Fix this
 WAVE_INT_COUNT = 2
 
 
@@ -40,7 +40,7 @@ class FeatureBuilder(DataTransformation):
     @abstractmethod
     def from_chain(cls, chain: DataTransformation, *args, **kwargs) -> "FeatureBuilder":
         """
-        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. This passes the 
+        Create a FeatureBuilder which can be added on top of another DataTransformation as a chain. This passes the
         chain's labels and features to the new FeatureBuilder object automatically. Applying the new FeatureBuilder
         will also apply all the transformations in the chain.
         Example:
@@ -51,14 +51,14 @@ class FeatureBuilder(DataTransformation):
         fb2 = FeatureBuilder2(labels, features, ..)
         data = fb1(data)
         data = fb2(data)
-        
+
         This is analogous to:
         fb1 = FeatureBuilder1(..)
         fb2 = FeatureBuilder2.from_chain(fb1, ..)
         data = fb2(data)
-        
-        
-        The chain's transform/build_feature should be called during the class's own build_feature method (Preferably 
+
+
+        The chain's transform/build_feature should be called during the class's own build_feature method (Preferably
         at the very first line).
         """
 
@@ -332,16 +332,27 @@ class FetalACbyDCFeatureBuilder(FeatureBuilder):
         return "Fetal\nACbyDC"
 
     def get_feature_names(self) -> List[str]:
-        detector_count = self._get_detector_count()
+        detector_sdd = self._get_detector_sdd()
         feature_name_appender = "MIN" if self.dc_mode == "min" else "MAX"
         # DO NOT Change this ordering
-        id_pairs = product(range(1, WAVE_INT_COUNT + 1), range(detector_count))
-        return [
-            f"{feature_name_appender}_ACbyDC_WV{wave_int}_{detector_index}" for wave_int, detector_index in id_pairs
-        ]
+        id_pairs = product(range(1, WAVE_INT_COUNT + 1), detector_sdd)
+        return [f"{feature_name_appender}_ACbyDC_WV{wave_int}_{sdd}" for wave_int, sdd in id_pairs]
 
     def get_label_names(self) -> List[str]:
         return self.combination_feature_builder.get_label_names()
+
+    def _get_detector_sdd(self) -> List[str]:
+        """
+        Get the SDD of the detectors using the intensity columns. Assumes the intensity columns
+        are formatted as "SDD_WaveInt" and all the SDDs are the same for each wave int and are
+        place consecutively in the list
+        """
+        all_sdd = []
+        for column in self.intensity_columns:
+            sdd = column.split("_")[0]
+            if sdd not in all_sdd:
+                all_sdd.append(sdd)
+        return all_sdd
 
     def _create_combination_index_columns(self) -> List[str]:
         index_columns = self._label_names.copy()
