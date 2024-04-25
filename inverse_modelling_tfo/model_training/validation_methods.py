@@ -3,6 +3,7 @@ Contains methods to split the data into train/validation based on some validatio
 
 Use these methods to generate two non-overlapping tables before passing them into DataLoaders
 """
+
 from abc import ABC, abstractmethod
 from typing import Tuple, Any, List
 import pandas as pd
@@ -60,7 +61,7 @@ class CVSplit(ValidationMethod):
     def split(self, table: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         table_splits: List[pd.DataFrame]
         # Linting might show a typing error but numpy.split supports splitting a List[DataFrame]
-        table_splits = np.array_split(table, self.cv_count) # type: ignore
+        table_splits = np.array_split(table, self.cv_count)  # type: ignore
         validation_table = pd.DataFrame(table_splits[self.window_number])
         train_table = table_splits[: self.window_number] + table_splits[: self.window_number + 1 :]
         train_table = pd.concat(train_table, axis=0)
@@ -85,8 +86,7 @@ class HoldOneOut(ValidationMethod):
         return train_table, validation_table
 
     def __str__(self) -> str:
-        return f"Holds out f{self.holdout_col_name} columns {self.holdout_value} for validation. The rest are used \
-            for training"
+        return f"Holds out f{self.holdout_col_name} columns {self.holdout_value} for validation. The rest are used for training"
 
 
 class CombineMethods(ValidationMethod):
