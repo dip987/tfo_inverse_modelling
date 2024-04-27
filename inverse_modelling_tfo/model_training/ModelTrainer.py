@@ -61,7 +61,7 @@ class ModelTrainer:
         """
         self.optimizer = optimizer_class(self.model.parameters(), **kwargs)
 
-    def change_batch_size(self, batch_size: int) -> None:
+    def set_batch_size(self, batch_size: int) -> None:
         """Changes DataLoader batch size
         (Because of how PyTorch libraries are defined, changing batchsize requires creating a new DataLoader)
         """
@@ -134,11 +134,12 @@ class ModelTrainer:
         return f"""
         Model Properties:
         {self.model}
-        Optimizer Properties"
+        Data Loader Properties:
+        {self.dataloader_gen}
+        Validation Method:
+        {self.validation_method}
+        Loss Function:
+        {self.loss_func}
+        Optimizer Properties":
         {self.optimizer}
-        DataLoader Params: 
-            Batch Size: {self.dataloader_gen.batch_size}
-            Validation Method: {self.validation_method}
-        Loss:
-            Train Loss: {self.train_loss[-1]}
-            Val. Loss: {self.validation_loss[-1]}"""
+        """
