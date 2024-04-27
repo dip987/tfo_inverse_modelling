@@ -1,12 +1,15 @@
 import unittest
-import pandas as pd
 import numpy as np
 import torch
 from torch.nn import MSELoss
 from sklearn.preprocessing import StandardScaler
-from inverse_modelling_tfo.model_training.custom_models import PerceptronBD
-from inverse_modelling_tfo.model_training.ModelTrainer import ModelTrainer
-from inverse_modelling_tfo.model_training.loss_funcs import LossTracker, BLPathlengthLoss, SumLoss, TorchLossWrapper
+from inverse_modelling_tfo.model_training.loss_funcs import (
+    LossTracker,
+    BLPathlengthLoss,
+    SumLoss,
+    TorchLossWrapper,
+    TorchLossWithChangingWeight,
+)
 
 
 class TestLostTracker(unittest.TestCase):
@@ -16,7 +19,7 @@ class TestLostTracker(unittest.TestCase):
     def test_initiation(self):
         self.loss_tracker.reset()
         self.assertEqual(self.loss_tracker.epoch_losses, {"train_loss": [], "val_loss": []})
-        self.assertEqual(self.loss_tracker.per_step_losses, {"train_loss": [], "val_loss": []})
+        self.assertEqual(self.loss_tracker.step_loss_sum, {"train_loss": [], "val_loss": []})
 
     def test_loss_tracker_step_update(self):
         self.loss_tracker.reset()
@@ -24,8 +27,8 @@ class TestLostTracker(unittest.TestCase):
         self.loss_tracker.step_update("train_loss", 2)
         self.loss_tracker.step_update("val_loss", 3)
         self.loss_tracker.step_update("val_loss", 4)
-        self.assertEqual(self.loss_tracker.per_step_losses["train_loss"], [1, 2])
-        self.assertEqual(self.loss_tracker.per_step_losses["val_loss"], [3, 4])
+        self.assertEqual(self.loss_tracker.step_loss_sum["train_loss"], [1, 2])
+        self.assertEqual(self.loss_tracker.step_loss_sum["val_loss"], [3, 4])
 
     def test_loss_averaging_on_epoch_update(self):
         self.loss_tracker.reset()
@@ -63,7 +66,7 @@ class TestTorchLossWrapper(unittest.TestCase):
         model_output = torch.tensor([1.0, 2.0, 3.0]).cuda()
         dataloader_data = [torch.tensor([1.0, 2.0, 3.0]).cuda()] * 2
         _ = self.torch_loss_object(model_output, dataloader_data, "train")
-        loss = self.torch_loss_object.loss_tracker.per_step_losses["train_loss"]
+        loss = self.torch_loss_object.loss_tracker.step_loss_sum["train_loss"]
         self.assertIsInstance(loss[0], float)
 
     def test_loss_tracker_epoch_ended_correct_length(self):
@@ -83,11 +86,11 @@ class TestTorchLossWrapper(unittest.TestCase):
             model_output = torch.tensor([1.0, 2.0, 3.0]).cuda()
             dataloader_data = [torch.tensor([1.0, 2.0, 3.0]).cuda()] * 2
             _ = self.torch_loss_object(model_output, dataloader_data, "train")
-            self.assertEqual(self.torch_loss_object.loss_tracker.per_step_losses["train_loss"], [0.0])
-            self.assertEqual(self.torch_loss_object.loss_tracker.per_step_losses["val_loss"], [])
+            self.assertEqual(self.torch_loss_object.loss_tracker.step_loss_sum["train_loss"], [0.0])
+            self.assertEqual(self.torch_loss_object.loss_tracker.step_loss_sum["val_loss"], [])
             _ = self.torch_loss_object(model_output, dataloader_data, "validate")
-            self.assertEqual(self.torch_loss_object.loss_tracker.per_step_losses["train_loss"], [0.0])
-            self.assertEqual(self.torch_loss_object.loss_tracker.per_step_losses["val_loss"], [0.0])
+            self.assertEqual(self.torch_loss_object.loss_tracker.step_loss_sum["train_loss"], [0.0])
+            self.assertEqual(self.torch_loss_object.loss_tracker.step_loss_sum["val_loss"], [0.0])
             self.torch_loss_object.loss_tracker_epoch_ended()
 
 
@@ -132,7 +135,7 @@ class TestSumLoss(unittest.TestCase):
         dataloader_data = [torch.tensor([2.0]).cuda()] * 2
         self.sum_loss(model_output, dataloader_data, "train")
         self.sum_loss.loss_tracker_epoch_ended()
-        self.assertEqual(self.sum_loss.loss_tracker.per_step_losses["loss1_train_loss"], [1.0])
+        self.assertEqual(self.sum_loss.loss_tracker.step_loss_sum["loss1_train_loss"], [1.0])
 
     # def test_weights_are_applied_properly(self):
     #     loss1 = TorchLossWrapper(MSELoss(), "loss1")
@@ -143,6 +146,37 @@ class TestSumLoss(unittest.TestCase):
     #     loss = sum_loss(model_output, dataloader_data, "train")
     #     self.assertEqual(sum_loss.loss_tracker.per_step_losses["loss1_train_loss"], [1.0])
     #     self.assertEqual(sum_loss.loss_tracker.per_step_losses["loss2_train_loss"], [0.5])
+
+
+class TestTorchLossWithChangingWeight(unittest.TestCase):
+    def setUp(self) -> None:
+        self.loss = TorchLossWithChangingWeight(MSELoss(), 0, 1, 2)
+
+    def test_weights_applied_correctly(self):
+        self.loss.reset()
+        model_output = torch.tensor([1.0]).cuda()
+        dataloader_data = [torch.tensor([2.0]).cuda()] * 2
+        _ = self.loss(model_output, dataloader_data, "train")
+        self.loss.loss_tracker_epoch_ended()
+        _ = self.loss(model_output, dataloader_data, "train")
+        self.loss.loss_tracker_epoch_ended()
+        # First loss = 1, weight = 0, second loss = 1, weight = 1 -> epoch loss = [0.0, 1.0]
+        self.assertEqual(self.loss.loss_tracker.epoch_losses["train_loss"], [0.0, 1.0])
+
+    def test_current_epoch_evolution(self):
+        self.loss.reset()
+        self.assertEqual(self.loss.current_epoch, 0)  # Starts at 1
+        model_output = torch.tensor([1.0]).cuda()
+        dataloader_data = [torch.tensor([2.0]).cuda()] * 2
+        _ = self.loss(model_output, dataloader_data, "train")
+        self.loss.loss_tracker_epoch_ended()
+        self.assertEqual(self.loss.current_epoch, 1)  # First epoch
+        _ = self.loss(model_output, dataloader_data, "train")
+        self.loss.loss_tracker_epoch_ended()
+        self.assertEqual(self.loss.current_epoch, 1)  # Epoch counter should not increase
+        _ = self.loss(model_output, dataloader_data, "train")
+        self.loss.loss_tracker_epoch_ended()
+        self.assertEqual(self.loss.current_epoch, 1)  # Epoch counter should not increase
 
 
 if __name__ == "__main__":

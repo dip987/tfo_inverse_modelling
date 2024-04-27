@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Dict, List, Optional, Tuple
 from pandas import DataFrame
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 from inverse_modelling_tfo.data.datasets import CustomDataset
 from inverse_modelling_tfo.model_training.validation_methods import ValidationMethod
@@ -29,6 +29,7 @@ class DataLoaderGenerator:
         """
         A class that generates dataloaders for training and validation datasets
 
+        Note: This converts the original data into float32 cuda tensors
         Args:
             table (DataFrame): Data in the form of a Pandas Dataframe
             x_columns (List[str]): Which columns will be treated as the predictors
@@ -85,9 +86,17 @@ class DataLoaderGenerator:
         # Shuffle and create training + validation row IDs
         train_table, validation_table = validation_method.split(self.table)
 
-        # Create the datasets
-        training_dataset = CustomDataset(train_table, [self.x_columns, self.y_columns], self.device)
-        validation_dataset = CustomDataset(validation_table, [self.x_columns, self.y_columns], self.device)
+        # Create Datasets
+        x_column_indices = [self.table.columns.tolist().index(x) for x in self.x_columns]
+        y_column_indices = [self.table.columns.tolist().index(y) for y in self.y_columns]
+        training_dataset = TensorDataset(
+            torch.tensor(train_table.iloc[:, x_column_indices].values, dtype=torch.float32).cuda(),
+            torch.tensor(train_table.iloc[:, y_column_indices].values, dtype=torch.float32).cuda(),
+        )
+        validation_dataset = TensorDataset(
+            torch.tensor(validation_table.iloc[:, x_column_indices].values, dtype=torch.float32).cuda(),
+            torch.tensor(validation_table.iloc[:, y_column_indices].values, dtype=torch.float32).cuda(),
+        )
 
         # Create the data loaders
         train_loader = DataLoader(training_dataset, **self._data_loader_params)
@@ -124,7 +133,9 @@ class DataLoaderGenerator3(DataLoaderGenerator):
     ):
         """
         A modified DataLoaderGenerator that generates TripleOutput Datasets in each dataloader. The third output can be
-        useful additional information being fed into the loss function
+        useful additional information being fed into the loss function.
+
+        Note: This converts the original data into float32 cuda tensors
         Args:
             table (DataFrame): Data in the form of a Pandas Dataframe
             x_columns (List[str]): Which columns will be treated as the predictors
@@ -151,17 +162,28 @@ class DataLoaderGenerator3(DataLoaderGenerator):
             Tuple[DataLoader]: Training DataLoader, Validation DataLoader
         """
         # Shuffle and create training + validation row IDs
-        train_table, val_table = validation_method.split(self.table)
+        train_table, validation_table = validation_method.split(self.table)
 
-        # Create the datasets
-        training_dataset = CustomDataset(train_table, [self.x_columns, self.y_columns, self.extra_columns], self.device)
-        validation_dataset = CustomDataset(val_table, [self.x_columns, self.y_columns, self.extra_columns], self.device)
+        # Create Datasets
+        x_column_indices = [self.table.columns.tolist().index(x) for x in self.x_columns]
+        y_column_indices = [self.table.columns.tolist().index(y) for y in self.y_columns]
+        extra_columns_index = [self.table.columns.tolist().index(e) for e in self.extra_columns]
+        training_dataset = TensorDataset(
+            torch.tensor(train_table.iloc[:, x_column_indices].values, dtype=torch.float32).cuda(),
+            torch.tensor(train_table.iloc[:, y_column_indices].values, dtype=torch.float32).cuda(),
+            torch.tensor(train_table.iloc[:, extra_columns_index].values, dtype=torch.float32).cuda(),
+        )
+        validation_dataset = TensorDataset(
+            torch.tensor(validation_table.iloc[:, x_column_indices].values, dtype=torch.float32).cuda(),
+            torch.tensor(validation_table.iloc[:, y_column_indices].values, dtype=torch.float32).cuda(),
+            torch.tensor(validation_table.iloc[:, extra_columns_index].values, dtype=torch.float32).cuda(),
+        )
 
         # Create the data loaders
         train_loader = DataLoader(training_dataset, **self._data_loader_params)
         validation_loader = DataLoader(validation_dataset, **self._data_loader_params)
 
         return train_loader, validation_loader
-    
+
     def __str__(self):
         return super().__str__() + f"Extra Columns: {self.extra_columns}"

@@ -7,7 +7,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, TensorDataset
 
 
 # Setting convention for the data loader. When a dataloader returns a tuple, the following indices are used

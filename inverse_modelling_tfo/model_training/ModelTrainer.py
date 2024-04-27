@@ -1,5 +1,4 @@
 from typing import Dict, Type
-from ray import train
 from torch import nn
 import torch
 from torch.optim import SGD, Optimizer
@@ -7,6 +6,7 @@ from inverse_modelling_tfo.data.datasets import DATA_LOADER_INPUT_INDEX
 from .DataLoaderGenerators import DataLoaderGenerator
 from .validation_methods import ValidationMethod
 from .loss_funcs import LossFunction
+from torch.utils.data import DataLoader
 
 
 class ModelTrainer:
@@ -38,15 +38,13 @@ class ModelTrainer:
         loss_func.loss_tracker.reset()
         self.dataloader_gen = dataloader_gen
         self.validation_method = validation_method
-        self.train_loader, self.validation_loader = dataloader_gen.generate(self.validation_method)
+        self.train_loader: DataLoader
+        self.validation_loader: DataLoader
         # Default optimizer
         self.optimizer: Optimizer
         self.optimizer = SGD(self.model.parameters(), lr=3e-4, momentum=0.9)
         self.device = device
         # Trackers
-        self.train_loss = []
-        self.validation_loss = []
-        self.combined_loss = []
         self.reporting = False
         self.total_epochs = 0
         # Set initial mode to train
@@ -71,6 +69,7 @@ class ModelTrainer:
     def run(self, epochs: int) -> None:
         """Run Training and store results. Each Run resets all old results"""
         self.model = self.model.to(self.device)
+        self.train_loader, self.validation_loader = self.dataloader_gen.generate(self.validation_method)
         # Check device types for the model and the data loader
         # assert(self.model.device == self.train_loader.dataset.device)
 
@@ -83,7 +82,6 @@ class ModelTrainer:
             # Training Loop
             self.mode = "train"
             self.model = self.model.train()
-            running_loss = 0.0
             for data in self.train_loader:
                 inputs = data[DATA_LOADER_INPUT_INDEX]
 
@@ -95,39 +93,22 @@ class ModelTrainer:
                 loss = self.loss_func(outputs, data, self.mode)
                 loss.backward()
                 self.optimizer.step()
-                running_loss += loss.item()
-            self.train_loss.append(running_loss / len(self.train_loader))
 
             # Validation Loop
             self.mode = "validate"
             self.model = self.model.eval()
-            running_loss = 0.0
             for data in self.validation_loader:
-                # to CUDA
                 inputs = data[DATA_LOADER_INPUT_INDEX]
 
                 with torch.no_grad():
                     outputs = self.model(inputs)
                     loss = self.loss_func(outputs, data, self.mode)
 
-                # print statistics
-                running_loss += loss.item()
-            self.validation_loss.append(running_loss / len(self.validation_loader))
-
-            # Update Combined Loss
-            self.combined_loss.append(self.validation_loss[-1] * self.train_loss[-1])
-
+            self.loss_func.loss_tracker_epoch_ended()
             # Reporting
             if self.reporting:
-                train.report(
-                    {
-                        "train_loss": self.train_loss[-1],
-                        "val_loss": self.validation_loss[-1],
-                        "combined_loss": self.combined_loss[-1],
-                    }
-                )
-
-            self.loss_func.loss_tracker_epoch_ended()
+                pass
+                # TODO: Implement this part if needed in the future
         self.total_epochs += epochs
 
     def __str__(self) -> str:

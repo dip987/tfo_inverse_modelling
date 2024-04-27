@@ -7,11 +7,7 @@ from typing import Dict, List, Optional
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 import torch
-from inverse_modelling_tfo.data.datasets import (
-    DATA_LOADER_LABEL_INDEX,
-    DATA_LOADER_INPUT_INDEX,
-    DATA_LOADER_EXTRA_INDEX,
-)
+from inverse_modelling_tfo.data.datasets import DATA_LOADER_LABEL_INDEX, DATA_LOADER_EXTRA_INDEX
 
 
 class LossTracker:
@@ -23,17 +19,20 @@ class LossTracker:
         self.tracked_losses = loss_names
         # Set types for the dictionaries
         self.epoch_losses: Dict[str, List[float]]
-        self.per_step_losses: Dict[str, List[float]]
         # Create the dictionaries
         self.epoch_losses = {loss_name: [] for loss_name in loss_names}  # Tracks the average loss for each epoch
-        self.per_step_losses = {loss_name: [] for loss_name in loss_names}  # Tracks the loss for each step(in an epoch)
+        self.step_loss_sum = {loss_name: 0.0 for loss_name in loss_names}  # Tracks the loss for each step(in an epoch)
+        self.steps_per_epoch_count = {
+            loss_name: 0 for loss_name in loss_names
+        }  # Tracks the number of steps in an epoch
 
     def step_update(self, loss_name: str, loss_value: float) -> None:
         """
         Update the losses for a single step within an epoch by appending the loss to the per_step_losses dictionary
         """
-        if loss_name in self.per_step_losses:
-            self.per_step_losses[loss_name].append(loss_value)
+        if loss_name in self.step_loss_sum:
+            self.steps_per_epoch_count[loss_name] += 1
+            self.step_loss_sum[loss_name] += loss_value
         else:
             raise ValueError(f"Loss name '{loss_name}' not found in the LossTracker list!")
 
@@ -45,12 +44,12 @@ class LossTracker:
         per step losses for the next epoch
         """
         for loss_name in self.epoch_losses.keys():
-            if len(self.per_step_losses[loss_name]) == 0:
-                continue
-            self.epoch_losses[loss_name].append(
-                sum(self.per_step_losses[loss_name]) / len(self.per_step_losses[loss_name])
-            )
-            self.per_step_losses[loss_name] = []
+            if self.steps_per_epoch_count[loss_name] != 0:
+                self.epoch_losses[loss_name].append(
+                    self.step_loss_sum[loss_name] / self.steps_per_epoch_count[loss_name]
+                )
+                self.step_loss_sum[loss_name] = 0.0  # Reset
+                self.steps_per_epoch_count[loss_name] = 0  # Reset
 
     def plot_losses(self) -> None:
         """
@@ -69,7 +68,8 @@ class LossTracker:
         """
         for loss_name in self.epoch_losses.keys():
             self.epoch_losses[loss_name] = []
-            self.per_step_losses[loss_name] = []
+            self.step_loss_sum[loss_name] = 0.0
+            self.steps_per_epoch_count[loss_name] = 0
 
 
 class LossFunction(ABC):
@@ -325,10 +325,9 @@ class SumLoss(LossFunction):
         """
         merged_dict = {}
         for index, loss_func in enumerate(self.loss_funcs):
-            dictionary = loss_func.loss_tracker.per_step_losses
-            for key, value in dictionary.items():
-                new_loss_list = [loss * self.weights_list[index] for loss in value]
-                merged_dict[key] = new_loss_list
+            dictionary = loss_func.loss_tracker.step_loss_sum
+            for loss_name, loss in dictionary.items():
+                merged_dict[loss_name] = loss * self.weights_list[index]
         train_losses = list(filter(lambda x: "train_loss" in x, merged_dict.keys()))
         val_losses = list(filter(lambda x: "val_loss" in x, merged_dict.keys()))
         merged_dict[self.train_loss_name] = [
@@ -338,7 +337,7 @@ class SumLoss(LossFunction):
         merged_dict[self.val_loss_name] = [
             sum([merged_dict[loss_name][i] for loss_name in val_losses]) for i in range(len(merged_dict[val_losses[0]]))
         ]
-        self.loss_tracker.per_step_losses = merged_dict
+        self.loss_tracker.step_loss_sum = merged_dict
 
     def __str__(self) -> str:
         individual_loss_descriptions = [str(loss_func) for loss_func in self.loss_funcs]
@@ -349,7 +348,6 @@ class SumLoss(LossFunction):
         Individual Loss Func Description:
         {individual_loss_descriptions}
         """
-    
 
     def loss_tracker_epoch_ended(self) -> None:
         # Merge the per step losses onto the underlying loss tracker
@@ -369,3 +367,60 @@ class SumLoss(LossFunction):
     def turn_off_tracking(self) -> None:
         for loss_func in self.loss_funcs:
             loss_func.turn_off_tracking()
+
+
+class TorchLossWithChangingWeight(LossFunction):
+    """
+    Loss whose weight changes linearly as training goes on. This is useful for implementing schedules/annealings
+    """
+
+    def __init__(
+        self, torch_loss_object, start_weight: float, end_weight: float, epoch_count: int, name: Optional[str] = None
+    ):
+        """
+        Loss whose weight changes linearly as training goes on. This is useful for implementing schedules/annealings
+
+        Args:
+            torch_loss_object: An initialized torch loss object
+            start_weight: The weight at the start of the epochs
+            end_weight: The weight at the end of the epochs
+            epoch_count: The total number of epochs
+            name: The name of the loss function
+        """
+        super().__init__(name)
+        self.loss_func = torch_loss_object
+        self.train_loss_name = "train_loss" if name is None else f"{name}_train_loss"
+        self.val_loss_name = "val_loss" if name is None else f"{name}_val_loss"
+        self._tracking_on = True
+        self.loss_tracker = LossTracker([self.train_loss_name, self.val_loss_name])
+        self.weights = torch.linspace(start_weight, end_weight, epoch_count)
+        self.current_epoch = 0
+        self.total_epochs = epoch_count
+
+    def __call__(self, model_output, dataloader_data, trainer_mode):
+        loss = self.weights[self.current_epoch].item() * self.loss_func(
+            model_output, dataloader_data[DATA_LOADER_LABEL_INDEX]
+        )
+        # Update internal loss tracker
+        if self._tracking_on:
+            loss_name = self.train_loss_name if trainer_mode == "train" else self.val_loss_name
+            self.loss_tracker.step_update(loss_name, loss.item())
+        return loss
+
+    def loss_tracker_epoch_ended(self) -> None:
+        if self.current_epoch < self.total_epochs - 1:
+            self.current_epoch += 1
+        self.loss_tracker.epoch_update()
+
+    def turn_on_tracking(self) -> None:
+        self._tracking_on = True
+
+    def turn_off_tracking(self) -> None:
+        self._tracking_on = False
+
+    def __str__(self) -> str:
+        return f"Torch Loss Function with changing weight: {self.loss_func}, Start Weight: {self.weights[0].item()}, End Weight: {self.weights[-1].item()}"
+
+    def reset(self) -> None:
+        self.current_epoch = 0
+        self.loss_tracker = LossTracker([self.train_loss_name, self.val_loss_name])
