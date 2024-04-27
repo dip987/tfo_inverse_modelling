@@ -3,7 +3,6 @@ A set of custom loss function meant to be used with the ModelTrainer Class
 """
 
 from abc import ABC, abstractmethod
-from hmac import new
 from typing import Dict, List, Optional
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
@@ -100,6 +99,18 @@ class LossFunction(ABC):
         """
 
     @abstractmethod
+    def turn_on_tracking(self) -> None:
+        """
+        Turn on the loss tracking
+        """
+
+    @abstractmethod
+    def turn_off_tracking(self) -> None:
+        """
+        Turn off the loss tracking
+        """
+
+    @abstractmethod
     def __str__(self) -> str:
         """
         Return a string representation of the loss function
@@ -145,20 +156,24 @@ class TorchLossWrapper(LossFunction):
         else:
             self.loss_tracker = LossTracker([f"{name}_train_loss", f"{name}_val_loss"])
         self.loss_func = torch_loss_object
+        self.train_loss_name = "train_loss" if name is None else f"{name}_train_loss"
+        self.val_loss_name = "val_loss" if name is None else f"{name}_val_loss"
+        self._tracking_on = True
 
     def __call__(self, model_output, dataloader_data, trainer_mode):
         loss = self.loss_func(model_output, dataloader_data[DATA_LOADER_LABEL_INDEX])
 
         # Update internal loss tracker
-        if trainer_mode == "train":
-            loss_name = "train_loss"
-        else:
-            loss_name = "val_loss"
-        if self.name is not None:
-            loss_name = f"{self.name}_{loss_name}"
-        self.loss_tracker.step_update(loss_name, loss.item())
-
+        if self._tracking_on:
+            loss_name = self.train_loss_name if trainer_mode == "train" else self.val_loss_name
+            self.loss_tracker.step_update(loss_name, loss.item())
         return loss
+
+    def turn_on_tracking(self) -> None:
+        self._tracking_on = True
+
+    def turn_off_tracking(self) -> None:
+        self._tracking_on = False
 
     def __str__(self) -> str:
         return f"Torch Loss Function: {self.loss_func}"
@@ -230,12 +245,6 @@ class BLPathlengthLoss(LossFunction):
         self.mu_a0_mean = scaler_mean[mu_a0_index]
         self.mu_a0_scale = scaler_scale[mu_a0_index]
         self.mu_a1_mean = scaler_mean[mu_a1_index]
-        # # Convert all to float32
-        # self.pathlength_mean = self.pathlength_mean.float()
-        # self.pathlength_scale = self.pathlength_scale.float()
-        # self.mu_a0_mean = self.mu_a0_mean.float()
-        # self.mu_a0_scale = self.mu_a0_scale.float()
-        # self.mu_a1_mean = self.mu_a1_mean.float()
 
         # Initialize and Underlying MSE Loss
         self.loss_func = TorchLossWrapper(torch.nn.MSELoss(), name=name)
@@ -250,19 +259,22 @@ class BLPathlengthLoss(LossFunction):
         # Calculate the predicted pulsation ratios
         predicted_del_mu_a = unscaled_mu_a1 - unscaled_mu_a0
         predicted_del_mu_a = predicted_del_mu_a.unsqueeze(1)  # Convert to 2D tensor
-        # TODO: FACTOR of 100!
-        predicted_bl_term = predicted_del_mu_a * unscaled_pathlength / 100  # Somehow we ended up with a 100x factor
-
+        predicted_bl_term = predicted_del_mu_a * unscaled_pathlength
         # Calculate the loss
         loss = self.loss_func(predicted_bl_term, [0, ground_truth_pulsation_ratios], trainer_mode)
         return loss
 
     def __str__(self) -> str:
-        return "Beer-Lamberts Law based Physics loss comparing the predicted pulsation ratio to the ground truth(using \
-            the pathlengths and mu_a values)"
+        return "Beer-Lamberts Law based Physics loss comparing the predicted pulsation ratio to the ground truth(using the pathlengths and mu_a values)"
 
     def loss_tracker_epoch_ended(self) -> None:
         self.loss_tracker.epoch_update()
+
+    def turn_on_tracking(self) -> None:
+        self.loss_func.turn_on_tracking()
+
+    def turn_off_tracking(self) -> None:
+        self.loss_func.turn_off_tracking()
 
 
 class SumLoss(LossFunction):
@@ -273,7 +285,7 @@ class SumLoss(LossFunction):
     being summed
 
     Addional notes: The internal loss does not update per step. Rather per epoch. To get per step values, you need to
-    look at the loss tracker for the loss_funcs
+    look at the loss tracker for the individual loss_funcs/i.e. the constituents
     """
 
     def __init__(self, loss_funcs: List[LossFunction], weights: List[float], name: Optional[str] = None):
@@ -293,7 +305,11 @@ class SumLoss(LossFunction):
         self.loss_funcs = loss_funcs
         self.weights_tensor = torch.tensor(weights, dtype=torch.float32)
         self.weights_list = weights
-        self.loss_tracker = LossTracker(all_names)
+        if name is None:
+            self.train_loss_name, self.val_loss_name = ["train_loss", "val_loss"]
+        else:
+            self.train_loss_name, self.val_loss_name = [f"{name}_train_loss", f"{name}_val_loss"]
+        self.loss_tracker = LossTracker(all_names + [self.train_loss_name, self.val_loss_name])
 
     def __call__(self, model_output, dataloader_data, trainer_mode) -> torch.Tensor:
         # Calculate one loss to get the typing correct
@@ -313,10 +329,27 @@ class SumLoss(LossFunction):
             for key, value in dictionary.items():
                 new_loss_list = [loss * self.weights_list[index] for loss in value]
                 merged_dict[key] = new_loss_list
+        train_losses = list(filter(lambda x: "train_loss" in x, merged_dict.keys()))
+        val_losses = list(filter(lambda x: "val_loss" in x, merged_dict.keys()))
+        merged_dict[self.train_loss_name] = [
+            sum([merged_dict[loss_name][i] for loss_name in train_losses])
+            for i in range(len(merged_dict[train_losses[0]]))
+        ]
+        merged_dict[self.val_loss_name] = [
+            sum([merged_dict[loss_name][i] for loss_name in val_losses]) for i in range(len(merged_dict[val_losses[0]]))
+        ]
         self.loss_tracker.per_step_losses = merged_dict
 
     def __str__(self) -> str:
-        return "Sum of multiple loss functions"
+        individual_loss_descriptions = [str(loss_func) for loss_func in self.loss_funcs]
+        individual_loss_descriptions = "\n".join(individual_loss_descriptions)
+        return f"""Sum of multiple loss functions. 
+        Constituent Losses: {[func.name for func in self.loss_funcs]}
+        Weights: {self.weights_list}
+        Individual Loss Func Description:
+        {individual_loss_descriptions}
+        """
+    
 
     def loss_tracker_epoch_ended(self) -> None:
         # Merge the per step losses onto the underlying loss tracker
@@ -328,3 +361,11 @@ class SumLoss(LossFunction):
 
         # Update self
         self.loss_tracker.epoch_update()
+
+    def turn_on_tracking(self) -> None:
+        for loss_func in self.loss_funcs:
+            loss_func.turn_on_tracking()
+
+    def turn_off_tracking(self) -> None:
+        for loss_func in self.loss_funcs:
+            loss_func.turn_off_tracking()

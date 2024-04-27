@@ -95,6 +95,16 @@ class DataLoaderGenerator:
 
         return train_loader, validation_loader
 
+    def __str__(self):
+        """
+        A string representation of the DataLoaderGenerator
+        """
+        return f"""{self.table.shape[0]} rows, {len(self.x_columns)} x columns, {len(self.y_columns)} y columns
+        Batch Size: {self.batch_size}
+        X Columns: {self.x_columns}
+        Y Columns: {self.y_columns}
+        """
+
 
 class DataLoaderGenerator3(DataLoaderGenerator):
     """
@@ -152,3 +162,6 @@ class DataLoaderGenerator3(DataLoaderGenerator):
         validation_loader = DataLoader(validation_dataset, **self._data_loader_params)
 
         return train_loader, validation_loader
+    
+    def __str__(self):
+        return super().__str__() + f"Extra Columns: {self.extra_columns}"
