@@ -149,13 +149,14 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         return "Row\nCombination"
 
     def get_feature_names(self) -> List[str]:
-        column_ids = product([1, 2], self.feature_columns)
+        # Feature name format is "feature_name_n" where n is the row number
+        column_ids = product(list(range(1, self.combo_count + 1)), self.feature_columns)
         return [f"{feature_name}_{n}" for n, feature_name in column_ids]
 
     def get_label_names(self) -> List[str]:
         new_variable_columns = []
-        for i in range(self.combo_count):
-            new_variable_columns.append(*[f"{var} {i}" for var in self.variable_labels])
+        for i in range(1, self.combo_count + 1):
+            new_variable_columns += [f"{var} {i}" for var in self.variable_labels]
 
         # DO NOT change this ordering
         return self.fixed_labels + new_variable_columns
