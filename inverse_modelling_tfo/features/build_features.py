@@ -103,6 +103,17 @@ class RowCombinationFeatureBuilder(FeatureBuilder):
         perm_or_comb: TypePairing = "perm",
         combo_count: int = 2,
     ) -> None:
+        """
+        Args:
+            feature_columns (List[str]): List of column names containing the features. These columns will be 
+            concatenated horizontally in the new row. Should have different values for each row
+            fixed_labels (List[str]): List of column names containing the labels that will be kept constant. These
+            columns contain the save value for each row. In other words, the rows are grouped based on this column
+            variable_labels (List[str]): List of column names containing the labels that will be permuted/combined
+            perm_or_comb (Literal['perm', 'comb', 'perm_r', 'comb_r']): Whether to use Permutation or Combination when
+            generating point pairs from the data points in the same group
+            combo_count (int): How many rows to pick from the same group to create the new row
+        """
         super().__init__()
         self.feature_columns = feature_columns
         self.fixed_labels = fixed_labels

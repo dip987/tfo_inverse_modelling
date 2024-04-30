@@ -7,8 +7,6 @@ from typing import Dict, List, Optional, Tuple
 from pandas import DataFrame
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-
-from inverse_modelling_tfo.data.datasets import CustomDataset
 from inverse_modelling_tfo.model_training.validation_methods import ValidationMethod
 
 
