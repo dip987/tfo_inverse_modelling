@@ -147,9 +147,11 @@ class TorchLossWrapper(LossFunction):
         2.  val_loss
     """
 
-    def __init__(self, torch_loss_object, name: Optional[str] = None):
+    def __init__(self, torch_loss_object, column_indices: Optional[List[int]] = None, name: Optional[str] = None):
         """
         :param torch_loss_object: An initialized torch loss object
+        :param column_indices: The indices of the columns to be used for the loss calculation. If None, all columns are
+        considered. Defaults to None
         """
         super().__init__(name)
         if name is None:
@@ -160,9 +162,15 @@ class TorchLossWrapper(LossFunction):
         self.train_loss_name = "train_loss" if name is None else f"{name}_train_loss"
         self.val_loss_name = "val_loss" if name is None else f"{name}_val_loss"
         self._tracking_on = True
+        self.column_indices = column_indices
 
     def __call__(self, model_output, dataloader_data, trainer_mode):
-        loss = self.loss_func(model_output, dataloader_data[DATA_LOADER_LABEL_INDEX])
+        if self.column_indices is not None:
+            loss = self.loss_func(
+                model_output[:, self.column_indices], dataloader_data[DATA_LOADER_LABEL_INDEX][:, self.column_indices]
+            )
+        else:
+            loss = self.loss_func(model_output, dataloader_data[DATA_LOADER_LABEL_INDEX])
 
         # Update internal loss tracker
         if self._tracking_on:
@@ -369,8 +377,6 @@ class BLPathlengthLossDelta(LossFunction):
 
     def turn_off_tracking(self) -> None:
         self.loss_func.turn_off_tracking()
-
-
 
 
 class SumLoss(LossFunction):
