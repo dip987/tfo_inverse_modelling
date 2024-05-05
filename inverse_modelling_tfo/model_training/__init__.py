@@ -7,7 +7,14 @@ This module contains the classes and functions to create, train and validate mod
 
 from .ModelTrainer import ModelTrainer
 from .validation_methods import ValidationMethod, RandomSplit, CVSplit, HoldOneOut, CombineMethods
-from .loss_funcs import TorchLossWrapper, SumLoss, BLPathlengthLoss, TorchLossWithChangingWeight, BLPathlengthLossDelta
+from .loss_funcs import (
+    TorchLossWrapper,
+    SumLoss,
+    BLPathlengthLoss,
+    TorchLossWithChangingWeight,
+    BLPathlengthLossDelta,
+    SumLossBalanced,
+)
 from .DataLoaderGenerators import DataLoaderGenerator, DataLoaderGenerator3
 
 __all__ = [
@@ -19,9 +26,10 @@ __all__ = [
     "CombineMethods",
     "TorchLossWrapper",
     "SumLoss",
-    'BLPathlengthLossDelta',
+    "SumLossBalanced",
+    "BLPathlengthLossDelta",
     "BLPathlengthLoss",
     "DataLoaderGenerator",
     "DataLoaderGenerator3",
-    "TorchLossWithChangingWeight"
+    "TorchLossWithChangingWeight",
 ]

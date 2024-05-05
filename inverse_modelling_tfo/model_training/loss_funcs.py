@@ -4,6 +4,7 @@ A set of custom loss function meant to be used with the ModelTrainer Class
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Literal, Optional
+from altair import overload
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sympy import Li
@@ -86,6 +87,8 @@ class LossFunction(ABC):
     def __init__(self, name: Optional[str] = None):
         self.name = name
         self.loss_tracker: LossTracker
+        self.train_loss_name = "train_loss" if name is None else f"{name}_train_loss"
+        self.val_loss_name = "val_loss" if name is None else f"{name}_val_loss"
 
     @abstractmethod
     def __call__(self, model_output, dataloader_data, trainer_mode: str) -> torch.Tensor:
@@ -159,8 +162,6 @@ class TorchLossWrapper(LossFunction):
         else:
             self.loss_tracker = LossTracker([f"{name}_train_loss", f"{name}_val_loss"])
         self.loss_func = torch_loss_object
-        self.train_loss_name = "train_loss" if name is None else f"{name}_train_loss"
-        self.val_loss_name = "val_loss" if name is None else f"{name}_val_loss"
         self._tracking_on = True
         self.column_indices = column_indices
 
@@ -407,18 +408,16 @@ class SumLoss(LossFunction):
         self.loss_funcs = loss_funcs
         self.weights_tensor = torch.tensor(weights, dtype=torch.float32)
         self.weights_list = weights
-        if name is None:
-            self.train_loss_name, self.val_loss_name = ["train_loss", "val_loss"]
-        else:
-            self.train_loss_name, self.val_loss_name = [f"{name}_train_loss", f"{name}_val_loss"]
         self.train_losses = list(filter(lambda x: "train_loss" in x, all_names))
         self.val_losses = list(filter(lambda x: "val_loss" in x, all_names))
         self.loss_tracker = LossTracker(all_names + [self.train_loss_name, self.val_loss_name])
 
     def __call__(self, model_output, dataloader_data, trainer_mode) -> torch.Tensor:
         # Calculate one loss to get the typing correct
-        loss = self.weights_tensor[0] * self.loss_funcs[0](model_output, dataloader_data, trainer_mode)
-        for loss_func, weight in zip(self.loss_funcs[1:], self.weights_tensor[1:]):
+        loss = torch.tensor(0.0, device=model_output.device, dtype=torch.float32)
+        # loss = self.weights_tensor[0] * self.loss_funcs[0](model_output, dataloader_data, trainer_mode)
+        # for loss_func, weight in zip(self.loss_funcs[1:], self.weights_tensor[1:]):
+        for loss_func, weight in zip(self.loss_funcs, self.weights_tensor):
             extra_loss_term = weight * loss_func(model_output, dataloader_data, trainer_mode)
             loss = torch.add(loss, extra_loss_term)
 
@@ -493,8 +492,20 @@ class TorchLossWithChangingWeight(LossFunction):
             start_weight: The weight at the start of the epochs
             end_weight: The weight at the end of the epochs
             epoch_count: The total number of epochs
-            start_delay: The number of epochs to wait before starting the weight change
+            start_delay: The number of epochs to wait before starting the weight change. During these epochs, the
+            start_weight will be used
             name: The name of the loss function
+
+        Parameters:
+            current_epoch: The current epoch number. Current epoch starts at 0 and goes up to
+            (total_epochs + start_delay - 1). After that point, it stops changing until reset is called
+            total_epochs: The total number of epochs as defined by the user for loss weight scheduling. This does not
+            include the start_delay(explained below).
+            start_delay: The number of epochs to wait before starting the weight change
+            weights: The weights for each epoch
+            loss_tracker: The loss tracker object
+            _tracking_on: A flag to turn on/off tracking
+
         """
         super().__init__(name)
         self.loss_func = loss_func
@@ -517,7 +528,7 @@ class TorchLossWithChangingWeight(LossFunction):
         return loss
 
     def loss_tracker_epoch_ended(self) -> None:
-        if self.current_epoch < self.total_epochs - 1:
+        if self.current_epoch < self.total_epochs + self.start_delay - 1:
             self.current_epoch += 1
         self.loss_tracker.epoch_update()
 
@@ -533,3 +544,40 @@ class TorchLossWithChangingWeight(LossFunction):
     def reset(self) -> None:
         self.current_epoch = 0
         self.loss_tracker = LossTracker([self.train_loss_name, self.val_loss_name])
+
+
+class SumLossBalanced(SumLoss):
+    """
+    Tries to balances the losses by normalizing them to the same scale. This is useful when the losses have different
+    scales and you want to balance them out.
+    """
+
+    def __init__(
+        self,
+        loss_funcs: List[LossFunction],
+        averaging_window: int = 5,
+        start_delay: int = 10,
+        name: Optional[str] = None,
+    ):
+        super().__init__(loss_funcs, [1.0] * len(loss_funcs), name)
+        self.average_window = averaging_window
+        self.start_delay = start_delay
+
+    def __call__(self, model_output, dataloader_data, trainer_mode):
+        epochs_completed = len(self.loss_tracker.epoch_losses[self.train_loss_name])
+        left = 0 if epochs_completed < self.average_window else epochs_completed - self.average_window
+        loss = torch.tensor(0.0, device=model_output.device, dtype=torch.float32)
+        avg = torch.tensor(0.0, device=model_output.device, dtype=torch.float32)
+        if epochs_completed > self.start_delay:
+            for loss_func in self.loss_funcs:
+                loss_key = loss_func.train_loss_name if trainer_mode == "train" else loss_func.val_loss_name
+                avg += torch.mean(torch.tensor(self.loss_tracker.epoch_losses[loss_key][left:]))
+            avg /= len(self.loss_funcs)
+        else:
+            avg = 1.0
+
+        for loss_func in self.loss_funcs:
+            extra_loss_term = loss_func(model_output, dataloader_data, trainer_mode) / avg
+            loss = torch.add(loss, extra_loss_term)
+
+        return loss

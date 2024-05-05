@@ -10,6 +10,7 @@ from inverse_modelling_tfo.model_training.loss_funcs import (
     TorchLossWrapper,
     TorchLossWithChangingWeight,
 )
+# TODO: Some of these tests are outdated and need to be updated
 
 
 class TestLostTracker(unittest.TestCase):
@@ -150,33 +151,45 @@ class TestSumLoss(unittest.TestCase):
 
 class TestTorchLossWithChangingWeight(unittest.TestCase):
     def setUp(self) -> None:
-        self.loss = TorchLossWithChangingWeight(MSELoss(), 0, 1, 2)
+        loss_func = TorchLossWrapper(MSELoss())
+        self.loss_nodelay = TorchLossWithChangingWeight(loss_func, 0, 1, 2)
+        self.loss_delay = TorchLossWithChangingWeight(loss_func, 1, 2, 2, 3)
 
     def test_weights_applied_correctly(self):
-        self.loss.reset()
+        self.loss_nodelay.reset()
         model_output = torch.tensor([1.0]).cuda()
         dataloader_data = [torch.tensor([2.0]).cuda()] * 2
-        _ = self.loss(model_output, dataloader_data, "train")
-        self.loss.loss_tracker_epoch_ended()
-        _ = self.loss(model_output, dataloader_data, "train")
-        self.loss.loss_tracker_epoch_ended()
+        _ = self.loss_nodelay(model_output, dataloader_data, "train")
+        self.loss_nodelay.loss_tracker_epoch_ended()
+        _ = self.loss_nodelay(model_output, dataloader_data, "train")
+        self.loss_nodelay.loss_tracker_epoch_ended()
         # First loss = 1, weight = 0, second loss = 1, weight = 1 -> epoch loss = [0.0, 1.0]
-        self.assertEqual(self.loss.loss_tracker.epoch_losses["train_loss"], [0.0, 1.0])
+        self.assertEqual(self.loss_nodelay.loss_tracker.epoch_losses["train_loss"], [0.0, 1.0])
 
-    def test_current_epoch_evolution(self):
-        self.loss.reset()
-        self.assertEqual(self.loss.current_epoch, 0)  # Starts at 1
+    def test_current_epoch_counter(self):
+        self.loss_nodelay.reset()
+        self.assertEqual(self.loss_nodelay.current_epoch, 0)  # Starts at 1
         model_output = torch.tensor([1.0]).cuda()
         dataloader_data = [torch.tensor([2.0]).cuda()] * 2
-        _ = self.loss(model_output, dataloader_data, "train")
-        self.loss.loss_tracker_epoch_ended()
-        self.assertEqual(self.loss.current_epoch, 1)  # First epoch
-        _ = self.loss(model_output, dataloader_data, "train")
-        self.loss.loss_tracker_epoch_ended()
-        self.assertEqual(self.loss.current_epoch, 1)  # Epoch counter should not increase
-        _ = self.loss(model_output, dataloader_data, "train")
-        self.loss.loss_tracker_epoch_ended()
-        self.assertEqual(self.loss.current_epoch, 1)  # Epoch counter should not increase
+        _ = self.loss_nodelay(model_output, dataloader_data, "train")
+        self.loss_nodelay.loss_tracker_epoch_ended()
+        self.assertEqual(self.loss_nodelay.current_epoch, 1)  # First epoch
+        _ = self.loss_nodelay(model_output, dataloader_data, "train")
+        self.loss_nodelay.loss_tracker_epoch_ended()
+        self.assertEqual(self.loss_nodelay.current_epoch, 1)  # Epoch counter should not increase
+        _ = self.loss_nodelay(model_output, dataloader_data, "train")
+        self.loss_nodelay.loss_tracker_epoch_ended()
+        self.assertEqual(self.loss_nodelay.current_epoch, 1)  # Epoch counter should not increase
+    
+    def test_delayed_weight_change(self):
+        self.loss_delay.reset()
+        model_output = torch.tensor([1.0]).cuda()
+        dataloader_data = [torch.tensor([2.0]).cuda()] * 2
+        for i in range(5):
+            _ = self.loss_delay(model_output, dataloader_data, "train")
+            self.loss_delay.loss_tracker_epoch_ended()
+        # First three epochs: weight = 1, next two epochs: starts with weight = 1, ends with weight = 2
+        self.assertEqual(self.loss_delay.loss_tracker.epoch_losses["train_loss"], [1.0, 1.0, 1.0, 1.0, 2.0])
 
 
 if __name__ == "__main__":
