@@ -29,13 +29,13 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
-# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulastion_ratio.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "logI2_by_I1.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
 
-in_src = Path(r'/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/dan_iccps_pencil.pkl')
-# in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/weitai_data.pkl")
+in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl")
 config_src = in_src.with_suffix(".json")
 
 fconc_rounding = 2
@@ -83,7 +83,7 @@ fixed_columns = [
 # Define Feature builders
 # Path 1
 # Create AC/DC using (I1 - I2)/max(I1, I2) or min(I1, I2)
-# fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
+fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
 
 # Path 2
 # Create AC/DC as log(I1)/log(I2)
@@ -104,7 +104,7 @@ fixed_columns = [
 
 # Path 3
 # Apply Row combinations - place the 2 sets of I's reponsbile for calculating AC along a single row
-fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
+# fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
 
 
 # Build features
@@ -118,8 +118,9 @@ config = {
     "labels": fb1.get_label_names(),
     "features": fb1.get_feature_names(),
     "feature_builder_txt": str(fb1),
-    "preprocessing_description": "Detector Normalization -> Long to Wide -> Row Combination -> keep I1 and I2 both",
+    "preprocessing_description": "Detector Normalization -> Long to Wide -> Row Combination -> Calculate log(I2)/log(I1)",
     "comments": "Most vanilla data pipeline/feature extraction. No normalization, no feature engineering. Just the raw data reshaped for the model.",
+    "data used": "/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl",
 }
 
 # Save data and config
