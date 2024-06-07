@@ -41,5 +41,6 @@ def custom_histogram(data: pd.Series, bin_count: int = 10, max_val: float = 345.
     temp_data = data[data <= max_val]  # Drop outliers on the right
     hist, _ = np.histogram(temp_data, bins=bin_edges)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    hist = hist / len(data) # Normalize the histogram
     bin_centers[0] = 0.0  # Force the first bin center to be 0. Massively reduces the error!
     return hist, bin_centers

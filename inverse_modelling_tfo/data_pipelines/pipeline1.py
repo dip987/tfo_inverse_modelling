@@ -29,8 +29,8 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "logI2_by_I1.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
@@ -83,7 +83,7 @@ fixed_columns = [
 # Define Feature builders
 # Path 1
 # Create AC/DC using (I1 - I2)/max(I1, I2) or min(I1, I2)
-fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
+# fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, labels, "max")
 
 # Path 2
 # Create AC/DC as log(I1)/log(I2)
@@ -104,7 +104,7 @@ fb1 = FetalACbyDCFeatureBuilder("FconcCenters", "comb", intensity_columns, label
 
 # Path 3
 # Apply Row combinations - place the 2 sets of I's reponsbile for calculating AC along a single row
-# fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
+fb1 = RowCombinationFeatureBuilder(intensity_columns, fixed_columns, ["Fetal Hb Concentration"], "comb")
 
 
 # Build features

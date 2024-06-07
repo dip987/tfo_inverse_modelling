@@ -5,7 +5,6 @@ A set of extensions for the PyTorch nn.Module class. These let you quickly creat
 """
 
 from typing import List, Literal, Optional
-from altair import layer
 import torch.nn as nn
 import torch
 
