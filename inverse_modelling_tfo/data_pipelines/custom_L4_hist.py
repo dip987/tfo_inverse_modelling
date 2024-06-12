@@ -33,8 +33,8 @@ def custom_histogram(data: pd.Series, bin_count: int = 10, max_val: float = 345.
         seen at 0. Moving the center to 0.5 introduces a very large error.
         3. The rest of the bins are logarithmically spaced between [1, max_val] mm.
         4. Any data point beyond max_val is dropped. The reason being exp(-L) for large values of L is very close to 0.
-        We default to 345. This is because we ultimately care about exp(-\mu*L) where \mu is the absorption coefficient.
-        The average value of \mu is around 0.04 mm^-1. So, exp(-0.04*345) produces 10^-6. This is a good threshold.
+        We default to 345. This is because we ultimately care about exp(-\\mu*L) where \\mu is the absorption coefficient.
+        The average value of \\mu is around 0.04 mm^-1. So, exp(-0.04*345) produces 10^-6. This is a good threshold.
 
     """
     bin_edges = custom_hist_edge_generator(bin_count, max_val=max_val)

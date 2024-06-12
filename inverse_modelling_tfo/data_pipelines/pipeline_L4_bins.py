@@ -31,6 +31,7 @@ for raw_file in tqdm(raw_files):
     all_sdd.sort()
     chosen_sdd = all_sdd[CHOSEN_DETECTOR_INDEX]
     data = data[sdd_col == chosen_sdd]  # Filter data for the chosen detector
+    data = data["L4 ppath"]     # Only consider the L4 ppath data
 
     # Read Config
     config_path = raw_file.with_suffix(".json")
