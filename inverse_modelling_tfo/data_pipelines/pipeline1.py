@@ -29,8 +29,8 @@ from inverse_modelling_tfo.features.data_transformations import (
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
-# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio_interp.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "logI2_by_I1.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
@@ -51,8 +51,8 @@ config_based_normalization(data, config_src)
 data = data.drop(columns="Uterus Thickness")
 
 # Interpolate intensity to remove noise
-# data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
-# data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
+data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
+data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
 # data = data.drop(columns="Interpolated Intensity")  # Cleanup
 
 # Define data transformers
