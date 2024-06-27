@@ -51,8 +51,9 @@ config_based_normalization(data, config_src)
 data = data.drop(columns="Uterus Thickness")
 
 # Interpolate intensity to remove noise
-data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
-data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
+# IF YOU WANT TO INTERPOLATE LARGE DATASET DO NOT USE THIS - USE TEST_PIPLINE2.ipynb
+# data = interpolate_exp(data, weights=(1, 0.6), interpolation_function=exp_piecewise_affine, break_indices=[4, 12, 20])
+# data["Intensity"] = data["Interpolated Intensity"]  # Replace OG intensity with interpolated intensity
 # data = data.drop(columns="Interpolated Intensity")  # Cleanup
 
 # Define data transformers
