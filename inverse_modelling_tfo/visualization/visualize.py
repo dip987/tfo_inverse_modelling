@@ -46,7 +46,7 @@ def plot_error_pred_truth_dist(
     """
     if columns_to_plot is None:
         columns_to_plot = y_columns
-    fig_dist, axes = plt.subplots(3, len(columns_to_plot), squeeze=True, figsize=figsize, sharey=True)
+    fig_dist, axes = plt.subplots(3, len(columns_to_plot), squeeze=False, figsize=figsize, sharey=True)
 
     train_data_truth = y_scaler.inverse_transform(dataset[:][1].cpu())
     train_data_truth = np.array(train_data_truth)  # Might be a Sparse Matrix, force cast to np.array
