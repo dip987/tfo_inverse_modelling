@@ -4,6 +4,8 @@ Custom Models
 A set of extensions for the PyTorch nn.Module class. These let you quickly create custom models with a set of parameters
 """
 
+from token import OP
+from turtle import forward
 from typing import List, Literal, Optional
 from torch import nn
 import torch
@@ -44,7 +46,8 @@ class PerceptronBD(nn.Module):
             inputs to the network, each consecutive number is the number of nodes(inputs) in each hidden layers.
             dropout_rates: Optional[List[float]] Dropout rates for the fully connected layers. The length must be the 1
             less than the length of fc_node_counts. Set this to None to avoid Dropout Layers. (Analogous to setting
-            dropout values to 0). Defaults to None / no dropout layer
+            dropout values to 0). Defaults to None / no dropout layer. You can also set the dropout rates to 0 to avoid
+            dropout layers.
         """
         # Sanity Check
         if dropout_rates is not None:
@@ -56,11 +59,11 @@ class PerceptronBD(nn.Module):
         for index, count in enumerate(node_counts[1:-1], start=1):
             self.layers.append(nn.BatchNorm1d(count))
             if dropout_rates is not None:
-                self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
+                if dropout_rates[index - 1] > 0:
+                    self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
             self.layers.append(nn.ReLU())
             self.layers.append(nn.Linear(count, node_counts[index + 1]))
         self.layers.append(nn.Flatten())
-        # self.layers.append(nn.Tanh())
         self.model = nn.Sequential(*self.layers)
         self.apply(he_initilization)
 
@@ -528,7 +531,7 @@ class SplitChannelCNN(nn.Module):
 class PMFEstimatorNet(nn.Module):
     def __init__(self, node_counts: List[int], dropout_rates: Optional[List[float]] = None):
         """
-        A simple fully connected network that takes in a set of features and outputs a set of probabilities. 
+        A simple fully connected network that takes in a set of features and outputs a set of probabilities.
         The final layer is a sigmoid layer which gets normalized by the sum of all the outputs. All outputs are always
         positive.
 
@@ -544,7 +547,6 @@ class PMFEstimatorNet(nn.Module):
         ## Sanity Check
         if dropout_rates is not None:
             assert len(node_counts) - 1 == len(dropout_rates), "length of dropout_rates must be 1 less than node counts"
-        
 
         ## Create the Model Architecture
         self.layers: List[nn.Module] = [nn.Linear(node_counts[0], node_counts[1])]
@@ -568,3 +570,55 @@ class PMFEstimatorNet(nn.Module):
         x = self.model(x)
         x = x / torch.sum(x, dim=1, keepdim=True)
         return x
+
+
+class DualPMFTMPNet(nn.Module):
+    """
+    A custom network that employs two separate PMF estimators for the pathlength distribution of two wavelenghts and
+    then merges the output from those to to finally estimate saturation and concentration.
+    """
+
+    def __init__(
+        self,
+        pmf_nodes: List[int],
+        terminal_fc_nodes: List[int],
+        pmf_dropouts: Optional[List[float]] = None,
+        terminal_fc_dropouts: Optional[List[float]] = None,
+    ):
+        """
+        Args:
+            pmf_nodes: List[int] Node counts for the fully connected layers of the PMF Estimator. The first element is
+            the number of inputs to the network, each consecutive number is the number of nodes(inputs) in each hidden
+            layers. The last element is the number of outputs
+            terminal_fc_nodes: List[int] Node counts for the fully connected layers after the PMF Estimator. The first
+            element is the number of inputs to the network, each consecutive number is the number of nodes(inputs) in each
+            hidden layers. The last element is the number of outputs
+            pmf_dropouts: Optional[List[float]] Dropout rates for the fully connected layers of the PMF Estimator. The
+            length must be the 1 less than the length of fc_node_counts. Set this to None to avoid Dropout Layers.
+            (Analogous to setting dropout values to 0). Defaults to None / no dropout layer
+            terminal_fc_dropouts: List[float] Dropout rates for the fully connected layers after the PMF Estimator. The
+            length must be the 1 less than the length of fc_node_counts. Set this to None to avoid Dropout Layers.
+            (Analogous to setting dropout values to 0). Defaults to None / no dropout layer
+        
+        Model Input: Takes a 2D tensor, with the first half belonging to PMF1 and the second half belonging to PMF2
+        Model Output: This model outputs a tuple of length 2: ([PMF1, PMF2], Output of Terminal FC)
+        Custom Loss: This model requires a custom loss function that takes in the tuple output and the target values
+        """
+        ## Sanity Check
+        if pmf_dropouts is not None:
+            assert len(pmf_nodes) - 1 == len(pmf_dropouts), "length of pmf_dropouts must be 1 less than pmf_nodes"
+        if terminal_fc_dropouts is not None:
+            assert len(terminal_fc_nodes) == len(terminal_fc_dropouts), "terminal dropouts len must equal its nodes"
+
+        ## Initialize the Model
+        super(DualPMFTMPNet, self).__init__()
+        self.pmf_estimator1 = PMFEstimatorNet(pmf_nodes, pmf_dropouts)
+        self.pmf_estimator2 = PMFEstimatorNet(pmf_nodes, pmf_dropouts)
+        terminal_fc_nodes = [pmf_nodes[-1] * 2] + terminal_fc_nodes
+        self.terminal_fc = PerceptronBD(terminal_fc_nodes, terminal_fc_dropouts)
+    
+    def forward(self, x):
+        pmf1 = self.pmf_estimator1(x[:, :x.shape[1] // 2])
+        pmf2 = self.pmf_estimator2(x[:, x.shape[1] // 2:])
+        pmf = torch.cat([pmf1, pmf2], dim=1)
+        return pmf, self.terminal_fc(pmf)

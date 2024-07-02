@@ -7,7 +7,7 @@ from typing import List, Optional
 import pandas as pd
 
 
-def merge_l4_dist(l4_dist_path: Path, to_merge: pd.DataFrame, on_columns: Optional[List[str]]) -> pd.DataFrame:
+def merge_l4_dist(l4_dist_path: Path, to_merge: pd.DataFrame, on_columns: Optional[List[str]] = None) -> pd.DataFrame:
     """
     Merge the L4 distribution data to the to_merge DataFrame on the on_column.
 
