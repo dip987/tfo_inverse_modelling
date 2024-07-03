@@ -4,8 +4,6 @@ Custom Models
 A set of extensions for the PyTorch nn.Module class. These let you quickly create custom models with a set of parameters
 """
 
-from token import OP
-from turtle import forward
 from typing import List, Literal, Optional
 from torch import nn
 import torch
@@ -599,7 +597,7 @@ class DualPMFTMPNet(nn.Module):
             terminal_fc_dropouts: List[float] Dropout rates for the fully connected layers after the PMF Estimator. The
             length must be the 1 less than the length of fc_node_counts. Set this to None to avoid Dropout Layers.
             (Analogous to setting dropout values to 0). Defaults to None / no dropout layer
-        
+
         Model Input: Takes a 2D tensor, with the first half belonging to PMF1 and the second half belonging to PMF2
         Model Output: This model outputs a tuple of length 2: ([PMF1, PMF2], Output of Terminal FC)
         Custom Loss: This model requires a custom loss function that takes in the tuple output and the target values
@@ -616,9 +614,104 @@ class DualPMFTMPNet(nn.Module):
         self.pmf_estimator2 = PMFEstimatorNet(pmf_nodes, pmf_dropouts)
         terminal_fc_nodes = [pmf_nodes[-1] * 2] + terminal_fc_nodes
         self.terminal_fc = PerceptronBD(terminal_fc_nodes, terminal_fc_dropouts)
-    
+
     def forward(self, x):
-        pmf1 = self.pmf_estimator1(x[:, :x.shape[1] // 2])
-        pmf2 = self.pmf_estimator2(x[:, x.shape[1] // 2:])
+        pmf1 = self.pmf_estimator1(x[:, : x.shape[1] // 2])
+        pmf2 = self.pmf_estimator2(x[:, x.shape[1] // 2 :])
         pmf = torch.cat([pmf1, pmf2], dim=1)
         return pmf, self.terminal_fc(pmf)
+
+
+class SkipConnect(nn.Module):
+    """
+    A special variation of an MLP where certain inputs connect directly to a hidden layer.
+
+    We deviced this network to incorporate depth data onto the MLP. Since the depth info is more impactful than the
+    intensity, it makes sense to connect it deeper onto model path compared to the intensity data.
+    """
+
+    def __init__(
+        self,
+        node_counts: List[int],
+        skip_connect_indices: List[int],
+        skip_connect_layer_number: int,
+        dropout_rates: Optional[List[float]] = None,
+    ):
+        """
+        Args:
+            node_counts: List[int] Node counts for the fully connected layers. [Input, Hidden1, Hidden2, ..., Output]
+            The input node_count should not include the skip_connect_indices
+            skip_connect_indices: List[int] Indices of the input features that should be connected directly to the
+            skip_connect_layer_number layer.
+            skip_connect_layer_number: int The layer number to which the skip_connect_indices should be connected to.
+            0 conencts it to the input layer, 1 to the first hidden layer and so on.
+            dropout_rates: Optional[List[float]] Dropout rates for the fully connected layers. The length must be the 1
+            less than the length of fc_node_counts. Set this to None to avoid Dropout Layers.
+
+        Design of the network:
+        1. The network is divided into two parts: left and right. The left part is the part before the skip connection and
+            the right part is the part after the skip connection.
+        2. The left part is simple MLP that always ends in a linear layer. The skip connect indices are concatenated
+            to the output of the left part.
+        3. The right part is also a simple MLP that always starts with non-linear layers. The input to the right part
+            is the output of the left part concatenated with the skip connect indices. This also ends in a linear layer.
+
+        """
+        ## Sanity Check
+        if dropout_rates is not None:
+            assert len(node_counts) - 1 == len(dropout_rates), "length of dropout_rates must be 1 less than node counts"
+        else:
+            dropout_rates = [0.0] * (len(node_counts) - 1)
+        assert len(node_counts) > 1, "node_counts must have atleast 2 elements"
+        assert skip_connect_layer_number < len(node_counts) - 1, "skip_connect_layer_number must be less than #layers"
+
+        super().__init__()
+
+        self.skip_indices = skip_connect_indices
+
+        ## Create the Model Architecture
+        # Break the network into two parts: before and after the skip connection
+        self.node_list_left = node_counts[: skip_connect_layer_number + 1]
+        dropout_rates_left = dropout_rates[:skip_connect_layer_number]
+        self.node_list_right = node_counts[skip_connect_layer_number:]
+        dropout_rates_right = dropout_rates[skip_connect_layer_number:]
+        self.node_list_right[0] += len(skip_connect_indices)
+        self.left_network: nn.Module
+        self.righ_network: nn.Module
+
+        # Define the left side of the network
+        if skip_connect_layer_number == 0:
+            self.left_network = nn.Identity()
+        else:
+            self.left_network_layers = [nn.Linear(self.node_list_left[0], self.node_list_left[1])]
+            for index, count in enumerate(self.node_list_left[1:-1]):
+                self.left_network_layers += [nn.BatchNorm1d(self.node_list_left[index + 1])]
+                if dropout_rates_left[index] > 0:
+                    self.left_network_layers += [nn.Dropout(dropout_rates_left[index])]
+                self.left_network_layers += [nn.ReLU()]
+                self.left_network_layers += [nn.Linear(count, self.node_list_left[index + 1])]
+            self.left_network = nn.Sequential(*self.left_network_layers)
+
+        # Define the right side of the network
+        if skip_connect_layer_number == len(node_counts) - 1:
+            self.right_network = nn.Identity()
+        else:
+            self.right_network_layers = []
+            for index, count in enumerate(self.node_list_right[:-1]):
+                self.right_network_layers.append(nn.BatchNorm1d(self.node_list_right[index]))
+                if dropout_rates_right[index] > 0:
+                    self.right_network_layers.append(nn.Dropout(dropout_rates_right[index]))
+                self.right_network_layers.append(nn.ReLU())
+                self.right_network_layers.append(nn.Linear(count, self.node_list_right[index + 1]))
+            self.right_network_layers.append(nn.Flatten())
+            self.right_network = nn.Sequential(*self.right_network_layers)
+        # self.left_network.apply(he_initilization)
+        # self.righ_network.apply(he_initilization)
+
+    def forward(self, x):
+        non_skip_indices = [i for i in range(x.shape[1]) if i not in self.skip_indices]
+        skip_data = x[:, self.skip_indices]
+        non_skip_data = x[:, non_skip_indices]
+        left_output = self.left_network(non_skip_data)
+        x = torch.cat([left_output, skip_data], dim=1)
+        return self.right_network(x)
