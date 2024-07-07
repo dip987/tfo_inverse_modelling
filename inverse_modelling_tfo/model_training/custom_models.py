@@ -7,6 +7,7 @@ A set of extensions for the PyTorch nn.Module class. These let you quickly creat
 from typing import List, Literal, Optional
 from torch import nn
 import torch
+from model_trainer.custom_models import PerceptronBD
 
 
 def he_initilization(module) -> None:
@@ -25,48 +26,6 @@ def he_initilization(module) -> None:
         nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
         if module.bias is not None:
             nn.init.zeros_(module.bias)
-
-
-class PerceptronBD(nn.Module):
-    """A Multi-Layer Fully-Connected Perceptron based on the array node counts with Batch Normalization and DropOut!
-    The first element is the number of inputs to the network, each consecutive number is the number of nodes(inputs)
-    in each hidden layers and the last element represents the number of outputs. The number of layers is 1 less than
-    the length of [node_counts]
-
-    The input should be a 2D tensor with the shape (batch_size, feature_size). The output would also be a 2D tensor of
-    shape (batch_size, output_feature_size), where output_feature_size is the last element of the [node_counts]
-    """
-
-    def __init__(self, node_counts: List[int], dropout_rates: Optional[List[float]] = None) -> None:
-        """
-        Args:
-            node_counts: List[int] Node counts for the fully connected layers. The first element is the number of
-            inputs to the network, each consecutive number is the number of nodes(inputs) in each hidden layers.
-            dropout_rates: Optional[List[float]] Dropout rates for the fully connected layers. The length must be the 1
-            less than the length of fc_node_counts. Set this to None to avoid Dropout Layers. (Analogous to setting
-            dropout values to 0). Defaults to None / no dropout layer. You can also set the dropout rates to 0 to avoid
-            dropout layers.
-        """
-        # Sanity Check
-        if dropout_rates is not None:
-            assert len(node_counts) - 1 == len(dropout_rates), "length of dropout_rates must be 1 less than node counts"
-        assert len(node_counts) > 1, "node_counts must have atleast 2 elements"
-        super().__init__()
-        self.layers: List[nn.Module]
-        self.layers = [nn.Linear(node_counts[0], node_counts[1])]
-        for index, count in enumerate(node_counts[1:-1], start=1):
-            self.layers.append(nn.BatchNorm1d(count))
-            if dropout_rates is not None:
-                if dropout_rates[index - 1] > 0:
-                    self.layers.append(nn.Dropout1d(dropout_rates[index - 1]))
-            self.layers.append(nn.ReLU())
-            self.layers.append(nn.Linear(count, node_counts[index + 1]))
-        self.layers.append(nn.Flatten())
-        self.model = nn.Sequential(*self.layers)
-        self.apply(he_initilization)
-
-    def forward(self, x):
-        return self.model(x)
 
 
 class FeatureResidual(torch.nn.Module):
