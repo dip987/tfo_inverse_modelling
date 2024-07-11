@@ -18,6 +18,13 @@ performance_calculators: Dict[PerformanceMetric, Callable[[np.ndarray, np.ndarra
     "mse": lambda y_true, y_pred: float(np.mean((y_true - y_pred) ** 2)),
 }
 
+std_calculators: Dict[PerformanceMetric, Callable[[np.ndarray, np.ndarray], float]] = {
+    "mae": lambda y_true, y_pred: float(np.std(np.abs(y_true - y_pred))),
+    "mse": lambda y_true, y_pred: float(np.std((y_true - y_pred) ** 2)),
+}
+
+
+
 
 def create_filtered_error_stats_table(
     data: pd.DataFrame,
@@ -75,7 +82,7 @@ def create_filtered_error_stats_table(
         row = [str(value)]
         for data_split, prediction in zip(data_splits, predictions):
             filtered_data = data_split[data_split[filter_column] == value]
-            filtered_prediction = prediction[data_split[filter_column] == value]
+            filtered_prediction = prediction[(data_split[filter_column] == value).to_numpy()]
             if len(filtered_data) == 0:
                 # Append 2 N/A values corresponding to the mean and std
                 row.append("N/A")
@@ -84,7 +91,9 @@ def create_filtered_error_stats_table(
             y_true = filtered_data[y_columns].to_numpy()
             y_pred = filtered_prediction[y_columns].to_numpy()
             error = performance_calculators[performance_metric](y_true, y_pred)
+            std = std_calculators[performance_metric](y_true, y_pred)
             row.append(f"{error:.4f}")
+            row.append(f"{std:.4f}")
         table.add_row(*row)
 
     console = Console(record=True)

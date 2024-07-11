@@ -141,6 +141,7 @@ def plot_error_distribution(
     performance_metric: PerformanceMetric,
     legend: str,
     filter_column: Optional[str] = None,
+    bin_count: int = 50,
 ) -> None:
     """
     Plot the error distribution for a given column.
@@ -163,7 +164,7 @@ def plot_error_distribution(
     else:
         pass
 
-    plt.hist(error, alpha=0.5, label=legend)
+    plt.hist(error, alpha=0.5, label=legend, bins=bin_count)
 
 
 def plot_prediction_distribution(
@@ -173,6 +174,7 @@ def plot_prediction_distribution(
     performance_metric: PerformanceMetric,
     legend: str,
     filter_column: Optional[str] = None,
+    bin_count: int = 50,
 ) -> None:
     """
     Plot the prediction distribution for a given column.
@@ -185,7 +187,7 @@ def plot_prediction_distribution(
         legend (str): Legend to use for the plot
         filter_column (Optional[str]): Column to use for filtering the data, defaults to None
     """
-    plt.hist(predictions[y_column], alpha=0.5, label=legend)
+    plt.hist(predictions[y_column], alpha=0.5, label=legend, bins=bin_count)
 
 
 def plot_ground_truth_distribution(
@@ -195,6 +197,7 @@ def plot_ground_truth_distribution(
     performance_metric: PerformanceMetric,
     legend: str,
     filter_column: Optional[str] = None,
+    bin_count: int = 50,
 ) -> None:
     """
     Plot the ground truth distribution for a given column.
@@ -207,7 +210,7 @@ def plot_ground_truth_distribution(
         legend (str): Legend to use for the plot
         fitler_column (Optional[str]): Column to use for filtering the data, defaults to None
     """
-    plt.hist(data[y_column], alpha=0.5, label=legend)
+    plt.hist(data[y_column], alpha=0.5, label=legend, bins=bin_count)
 
 
 plot_types_implementation = {
@@ -228,6 +231,7 @@ def plot_performance_distributions(
     validation_method: Optional[ValidationMethod] = None,
     plot_types: Optional[List[PlotTypes]] = None,
     figsize: Tuple[float, float] = (12, 6),
+    bin_count: int = 50,
 ) -> Figure:
     """
     Plot diffent types of distributions to visualize the performance of the model.
@@ -244,6 +248,7 @@ def plot_performance_distributions(
         validation_method (Optional[ValidationMethod]): Validation method to use, defaults to None/No split
         plot_types (List[PlotTypes]): List of PlotTypes to plot. Check out the PlotTypes Enum for all options.
         defaults to [PlotTypes.ERROR_DISTRIBUTION, PlotTypes.PREDICTION_DISTRIBUTION, PlotTypes.TRUTH_DISTRIBUTION]
+        bin_count (int): Number of bins to use for the histograms, defaults to 50
 
     Returns:
         Figure: Matplotlib Figure containing the plots
@@ -267,7 +272,7 @@ def plot_performance_distributions(
     if plot_types is None:
         plot_types = [PlotTypes.ERROR_DISTRIBUTION, PlotTypes.PREDICTION_DISTRIBUTION, PlotTypes.TRUTH_DISTRIBUTION]
 
-    fig, axes = plt.subplots(len(plot_types), len(y_columns), figsize=figsize, sharey=True, sharex=True, squeeze=False)
+    fig, axes = plt.subplots(len(plot_types), len(y_columns), figsize=figsize, sharex=True, squeeze=False)
 
     for split_index, data_split in enumerate(data_splits):
         for row_index, plot_type in enumerate(plot_types):
@@ -282,6 +287,7 @@ def plot_performance_distributions(
                     performance_metric,
                     split_legend[split_index],
                     filter_column,
+                    bin_count
                 )
 
     ## Legend

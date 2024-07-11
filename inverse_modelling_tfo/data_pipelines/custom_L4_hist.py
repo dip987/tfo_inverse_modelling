@@ -18,7 +18,7 @@ def custom_hist_edge_generator(bin_count: int, max_val: float):
 def custom_histogram(data: pd.Series, bin_count: int = 10, max_val: float = 345.0):
     """
     Bins L4 ppath using a custom implementation of histogram.
-    :param data: The L4 ppath data as pandas Series. The data is assumed to be in mm.
+    :param data: The L4 ppath data as pandas Series from a single detector. The data is assumed to be in mm.
     :param bin_count: Number of bins to use. Default is 10.
     :param max_val: Maximum value to consider. Any pathlength beyond this is dropped. Default is 345.0 mm.
     :return: A tuple of two numpy arrays. (Histogram, Bin Centers)
