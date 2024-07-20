@@ -24,8 +24,6 @@ std_calculators: Dict[PerformanceMetric, Callable[[np.ndarray, np.ndarray], floa
 }
 
 
-
-
 def create_filtered_error_stats_table(
     data: pd.DataFrame,
     x_columns: List[str],
@@ -90,6 +88,52 @@ def create_filtered_error_stats_table(
                 continue
             y_true = filtered_data[y_columns].to_numpy()
             y_pred = filtered_prediction[y_columns].to_numpy()
+            error = performance_calculators[performance_metric](y_true, y_pred)
+            std = std_calculators[performance_metric](y_true, y_pred)
+            row.append(f"{error:.4f}")
+            row.append(f"{std:.4f}")
+        table.add_row(*row)
+
+    console = Console(record=True)
+    console.print(table)
+    return console
+
+
+def create_per_column_error_stats_table(
+    data: pd.DataFrame,
+    x_columns: List[str],
+    y_columns: List[str],
+    y_scaler: StandardScaler,
+    model: torch.nn.Module,
+    performance_metric: PerformanceMetric = "mae",
+    validation_method: Optional[ValidationMethod] = None,
+) -> Console:
+    if validation_method is None:
+        data_splits = [data]
+    else:
+        data_splits = validation_method.split(data)
+
+    predictions = []  # Unscaled Predictions
+    for data_split in data_splits:
+        predictions.append(_generate_predictions(model, data_split, x_columns, y_columns, y_scaler))
+        data_split[y_columns] = y_scaler.inverse_transform(data_split[y_columns])
+
+    # Create Table Headers
+    table = Table(title="Error Statistics")
+    table.add_column("Label", style="green")
+    table.add_column("Train Mean", justify="right", style="cyan")
+    table.add_column("Train Std", justify="right", style="cyan")
+    if validation_method is not None:
+        table.add_column("Validation Mean", justify="right", style="magenta")
+        table.add_column("Validation Std", justify="right", style="magenta")
+
+    # Each row corresponds to a different column
+    ## For the Training and Validation Set, create a row for each column
+    for y_column in y_columns:
+        row = [y_column]
+        for data_split, prediction in zip(data_splits, predictions):
+            y_true = data_split[y_column].to_numpy()
+            y_pred = prediction[y_column].to_numpy()
             error = performance_calculators[performance_metric](y_true, y_pred)
             std = std_calculators[performance_metric](y_true, y_pred)
             row.append(f"{error:.4f}")
