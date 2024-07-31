@@ -47,9 +47,13 @@ class TestCustomDataset(unittest.TestCase):
 
 class TestSignDetectionDataset(unittest.TestCase):
     def setUp(self):
+        """
+        Sets up group_x -> 10 random tensors of size 10x10 (group size x feature size) and 
+        group_y -> 10 tensors of size 10 (group size x 1) sorted from 0 to 9 (unique values)
+        """
         # Create a dataset with 10 groups of 10 data points each
         self.data_groups_x = [torch.randn(10, 10) for _ in range(10)]
-        self.data_groups_y = [torch.randint(0, 2, (10,)) for _ in range(10)]
+        self.data_groups_y = [torch.arange(0, 10) for _ in range(10)]
         self.dataset = SignDetectionDataset(self.data_groups_x, self.data_groups_y)
 
     def test_dataset_initialized_properly(self):
@@ -88,6 +92,16 @@ class TestSignDetectionDataset(unittest.TestCase):
             x_data, label = self.dataset[i]
             self.assertEqual(x_data.dtype, torch.float32)
             self.assertEqual(label.dtype, torch.float32)
+    
+    def test_not_all_y_have_same_value(self):
+        """
+        Test for a large number of samples drawn that not all labels are the same
+        """
+        all_labels = torch.cat([self.dataset[i % 10][1] for i in range(1000)])
+        one_count = torch.sum(all_labels == 1).item()
+        zero_count = torch.sum(all_labels == 0).item()
+        self.assertTrue(one_count != 10)
+        self.assertTrue(zero_count != 10)
 
 
 if __name__ == "__main__":

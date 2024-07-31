@@ -27,7 +27,7 @@ class PlotTypes(IntEnum):
         return self.name.replace("_", " ").title()
 
 
-PerformanceMetric = Literal["mae", "mse"]
+PerformanceMetric = Literal["mae", "mse", "mae_std", "mse_std", "precision", "recall", "f1"]
 
 
 def plot_error_pred_truth_dist(
@@ -140,7 +140,7 @@ def plot_error_distribution(
     y_column: str,
     performance_metric: PerformanceMetric,
     legend: str,
-    filter_column: Optional[str] = None,
+    filter_column: Optional[str] = None,    #TODO: Filter column is not used yet
     bin_count: int = 50,
 ) -> None:
     """

@@ -69,6 +69,12 @@ class ChangeDetectionDataLoaderGenerator(DataLoaderGenerator):
         train_y_groups = _groupby_to_tensor(train_table, self.contrast_fixed_columns, self.y_columns, self.device)
         val_x_groups = _groupby_to_tensor(validation_table, self.contrast_fixed_columns, self.x_columns, self.device)
         val_y_groups = _groupby_to_tensor(validation_table, self.contrast_fixed_columns, self.y_columns, self.device)
+        
+        # Remove any element from these groups whose length is less than 2
+        train_x_groups = [x for x in train_x_groups if x.shape[0] >= 2]
+        train_y_groups = [y for y in train_y_groups if y.shape[0] >= 2]
+        val_x_groups = [x for x in val_x_groups if x.shape[0] >= 2]
+        val_y_groups = [y for y in val_y_groups if y.shape[0] >= 2]
 
         # Create Datasets using the Tensor List
         training_dataset = SignDetectionDataset(train_x_groups, train_y_groups)

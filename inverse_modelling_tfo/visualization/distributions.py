@@ -35,7 +35,8 @@ def generate_model_error_and_prediction(
     # Set model to eval
     model = model.eval()
     model_cpu = model.cpu()  # All calculations need to be on the CPU for numpy to work
-    row_count, _ = data_loader.dataset[:][1].shape  # Size of the entire y-labels Tensors
+    # row_count, _ = data_loader.dataset[:][1].shape  # Size of the entire y-labels Tensors
+    row_count = len(data_loader.dataset)  # Size of the entire y-labels Tensors
     batch_size = data_loader.batch_size if isinstance(data_loader.batch_size, int) else -1
 
     if batch_size == -1:
