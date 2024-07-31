@@ -165,7 +165,9 @@ class SignDetectionDataset(Dataset):
 
         ## Generate Label
         label = torch.tensor(
-            [1 if (group_y[row1_index].item() > group_y[row1_index].item()) else 0], device=x_data.device
+            [1.0 if (group_y[row1_index].item() > group_y[row1_index].item()) else 0.0],
+            device=x_data.device,
+            dtype=torch.float32,
         )
 
         return x_data, label

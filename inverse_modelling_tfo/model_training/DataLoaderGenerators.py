@@ -21,7 +21,7 @@ def _groupby_to_tensor(
     x_groups = [
         table.iloc[row_indices, col_indices] for row_indices in list(table.groupby(group_columns).groups.values())
     ]
-    x_groups = [torch.tensor(x.values, device=device) for x in x_groups]
+    x_groups = [torch.tensor(x.values, device=device, dtype=torch.float32) for x in x_groups]
     return x_groups
 
 

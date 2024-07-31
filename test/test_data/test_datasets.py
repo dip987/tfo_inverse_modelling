@@ -82,6 +82,12 @@ class TestSignDetectionDataset(unittest.TestCase):
         for i in range(100):
             x_data, label = self.dataset[i % 10]
             self.assertEqual(x_data.device, label.device)
+    
+    def test_x_and_y_are_float32(self):
+        for i in range(10):
+            x_data, label = self.dataset[i]
+            self.assertEqual(x_data.dtype, torch.float32)
+            self.assertEqual(label.dtype, torch.float32)
 
 
 if __name__ == "__main__":
