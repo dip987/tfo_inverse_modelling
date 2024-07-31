@@ -272,7 +272,7 @@ def plot_performance_distributions(
     if plot_types is None:
         plot_types = [PlotTypes.ERROR_DISTRIBUTION, PlotTypes.PREDICTION_DISTRIBUTION, PlotTypes.TRUTH_DISTRIBUTION]
 
-    fig, axes = plt.subplots(len(plot_types), len(y_columns), figsize=figsize, sharex=True, squeeze=False)
+    fig, axes = plt.subplots(len(plot_types), len(y_columns), figsize=figsize, sharex=True, sharey=True, squeeze=False)
 
     for split_index, data_split in enumerate(data_splits):
         for row_index, plot_type in enumerate(plot_types):

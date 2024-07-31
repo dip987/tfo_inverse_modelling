@@ -5,8 +5,6 @@ This module contains the classes and functions to create, train and validate mod
 
 """
 
-from .ModelTrainer import ModelTrainer
-from .validation_methods import ValidationMethod, RandomSplit, CVSplit, HoldOneOut, CombineMethods
 from .loss_funcs import (
     TorchLossWrapper,
     SumLoss,
@@ -15,21 +13,14 @@ from .loss_funcs import (
     BLPathlengthLossDelta,
     SumLossBalanced,
 )
-from .DataLoaderGenerators import DataLoaderGenerator, DataLoaderGenerator3
+from .DataLoaderGenerators import ChangeDetectionDataLoaderGenerator
 
 __all__ = [
-    "ModelTrainer",
-    "ValidationMethod",
-    "RandomSplit",
-    "CVSplit",
-    "HoldOneOut",
-    "CombineMethods",
     "TorchLossWrapper",
     "SumLoss",
     "SumLossBalanced",
     "BLPathlengthLossDelta",
     "BLPathlengthLoss",
-    "DataLoaderGenerator",
-    "DataLoaderGenerator3",
     "TorchLossWithChangingWeight",
+    "ChangeDetectionDataLoaderGenerator",
 ]

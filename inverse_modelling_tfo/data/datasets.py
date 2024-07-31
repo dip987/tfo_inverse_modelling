@@ -131,3 +131,41 @@ class DifferentialCombinationDataset(Dataset):
         return combined_x, differential_y.view(
             1,
         )
+
+
+class SignDetectionDataset(Dataset):
+    """
+    DataLoader that generates random combinations of two rows in the table. Pass in the different probably groups of
+    to sample from. For each data point, this chooses a group and samples two random rows from that group! The target
+    is 1 if the first row's y data is greater than the second row's y_data, else 0.
+    """
+
+    def __init__(self, data_groups_x: List[torch.Tensor], data_groups_y: List[torch.Tensor]):
+        # Sanity checks - All groups should have a length of atleast 2
+        assert all([x.shape[0] >= 2 for x in data_groups_x]), "All groups should have atleast 2 data points"
+        assert all(
+            [x.shape[0] == y.shape[0] for x, y in zip(data_groups_x, data_groups_y)]
+        ), "X and Y should have same length"
+
+        self.data_groups_x = data_groups_x
+        self.data_groups_y = data_groups_y
+
+    def __len__(self):
+        return len(self.data_groups_x)
+
+    def __getitem__(self, index):
+        ## Pick two random rows from the group
+        group_x = self.data_groups_x[index]
+        group_y = self.data_groups_y[index]
+        row1_index = torch.randint(0, group_x.shape[0], (1,)).item()
+        row2_index = torch.randint(0, group_x.shape[0], (1,)).item()
+        while row1_index == row2_index:
+            row2_index = torch.randint(0, group_x.shape[0], (1,)).item()
+        x_data = torch.cat([group_x[row1_index], group_x[row2_index]])
+
+        ## Generate Label
+        label = torch.tensor(
+            [1 if (group_y[row1_index].item() > group_y[row1_index].item()) else 0], device=x_data.device
+        )
+
+        return x_data, label

@@ -1,7 +1,11 @@
+"""
+Test Datasets
+"""
+
 import unittest
 import pandas as pd
 import torch
-from inverse_modelling_tfo.data.datasets import CustomDataset
+from inverse_modelling_tfo.data.datasets import CustomDataset, SignDetectionDataset
 
 
 class TestCustomDataset(unittest.TestCase):
@@ -39,6 +43,45 @@ class TestCustomDataset(unittest.TestCase):
         self.assertEqual(dataset1[0][0].device, torch.device("cuda", index=0))  # First GPU
         dataset2 = CustomDataset(self.data, [["a", "b"], ["c", "d"]], torch.device("cpu"))
         self.assertEqual(dataset2[0][0].device, torch.device("cpu"))
+
+
+class TestSignDetectionDataset(unittest.TestCase):
+    def setUp(self):
+        # Create a dataset with 10 groups of 10 data points each
+        self.data_groups_x = [torch.randn(10, 10) for _ in range(10)]
+        self.data_groups_y = [torch.randint(0, 2, (10,)) for _ in range(10)]
+        self.dataset = SignDetectionDataset(self.data_groups_x, self.data_groups_y)
+
+    def test_dataset_initialized_properly(self):
+        # Test the length
+        self.assertEqual(len(self.dataset), 10)
+
+        # Test the data generation
+        for i in range(100):
+            x_data, label = self.dataset[i % 10]
+            self.assertEqual(x_data.shape, torch.Size([20]))
+            self.assertIn(label, [0, 1])
+
+    def test_batches_work_in_a_dataloader(self):
+        dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=5, shuffle=True)
+        for _, (x_data, labels) in enumerate(dataloader):
+            self.assertEqual(x_data.shape, torch.Size([5, 20]))
+            self.assertEqual(labels.shape, torch.Size([5, 1]))
+
+    def test_works_with_gpu_tensors(self):
+        gpu_x_columns = [x.cuda() for x in self.data_groups_x]
+        gpu_y_columns = [y.cuda() for y in self.data_groups_y]
+        dataset = SignDetectionDataset(gpu_x_columns, gpu_y_columns)
+        self.assertEqual(len(dataset), 10)
+        for i in range(100):
+            x_data, label = dataset[i % 10]
+            self.assertEqual(x_data.shape, torch.Size([20]))
+            self.assertIn(label, [0, 1])
+
+    def test_y_has_the_same_device_as_x(self):
+        for i in range(100):
+            x_data, label = self.dataset[i % 10]
+            self.assertEqual(x_data.device, label.device)
 
 
 if __name__ == "__main__":
