@@ -34,6 +34,7 @@ def generate_model_error_and_prediction(
     """
     # Set model to eval
     model = model.eval()
+    # TODO: We should not be moving the model to the CPU, this is a temporary fix!
     model_cpu = model.cpu()  # All calculations need to be on the CPU for numpy to work
     # row_count, _ = data_loader.dataset[:][1].shape  # Size of the entire y-labels Tensors
     row_count = len(data_loader.dataset)  # Size of the entire y-labels Tensors

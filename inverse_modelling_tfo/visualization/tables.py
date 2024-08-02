@@ -8,9 +8,120 @@ import pandas as pd
 from rich.table import Table
 from rich.console import Console
 import torch
+from torch.utils.data import DataLoader
 import numpy as np
 from model_trainer import ValidationMethod
+from torchmetrics import MeanAbsoluteError, R2Score, Metric
 from inverse_modelling_tfo.visualization.visualize import _generate_predictions, PerformanceMetric
+
+
+def _torch_unscale(y: torch.Tensor, y_scaler: Optional[StandardScaler]) -> torch.Tensor:
+    """
+    Unscale the output features using the y_scaler object. If the y_scaler object is None, the function will return the
+    input tensor as it is. Works with both cpu and gpu tensors
+    Args:
+        y (torch.Tensor): Tensor containing the output features
+        y_scaler (StandardScaler): Scaler object used to scale the output features
+    Returns:
+        torch.Tensor: Tensor containing the unscaled output features
+    """
+    ## No Scaler Path
+    if y_scaler is None:
+        return y
+
+    ## Scaler Path
+    scale = torch.tensor(y_scaler.scale_, device=y.device, dtype=y.dtype)
+    mean = torch.tensor(y_scaler.mean_, device=y.device, dtype=y.dtype)
+    return y * scale + mean
+
+
+def _calculate_performance(
+    loader: DataLoader,
+    model: torch.nn.Module,
+    metric: Metric,
+    y_scaler: Optional[StandardScaler],
+    y_index: Optional[int] = None,
+) -> float:
+    model = model.eval()
+    metric.reset()
+    for x, y in loader:
+        y_pred = _torch_unscale(model(x), y_scaler)
+        y = _torch_unscale(y, y_scaler)
+
+        # In case an index is passed, only use that index for the metric calculation - otherwise, use all columns
+        if y_index is not None:
+            y_pred = y_pred[:, y_index]
+            y = y[:, y_index]
+        metric(y_pred, y)
+    return metric.compute()
+
+
+def print_performance_metrics(
+    model: torch.nn.Module,
+    train_loader: DataLoader,
+    validation_loader: Optional[DataLoader] = None,
+    y_scaler: Optional[StandardScaler] = None,
+    metrics: Optional[List[Metric]] = None,
+    filtered_per_output: bool = False,
+) -> Console:
+    """
+    Pretty print the performance metrics for the model on the training and validation sets. Default metrics are MAE and
+    R2 Score. Implementaiton note: everything is transfered to the same device as the dataloaders. 
+
+    Args:
+        train_loader (DataLoader): DataLoader object for the training set
+        validation_loader (DataLoader): DataLoader object for the validation set
+        model (torch.nn.Module): PyTorch model object
+        y_scaler (Optional[StandardScaler]): Scaler object used to scale the output features. Set to None if the output
+                                                features are not scaled
+        metrics (Optional[List[Metric]]): List of TorchMetrics objects to be used for calculating the performance.
+                                            Default: [MeanAbsoluteError(), R2Score()]
+        filtered_per_output (bool): If True, the performance metrics will be calculated for each output column
+                                    separately. Default: False
+    Returns:
+        Console: Rich Console object containing the performance metrics (As well as prininting them)
+    """
+    if metrics is None:
+        metrics = [MeanAbsoluteError(), R2Score()]
+
+    ## Get output shape by loading a single batch
+    sample_y = next(iter(train_loader))[1]
+    output_column_count = sample_y.shape[1]
+    y_indices = range(output_column_count) if filtered_per_output else [None]  # Indices for the output columns
+
+    # Preparing model for evaluation
+    model = model.eval()
+    model = model.to(sample_y.device)
+
+    ## Convert metrics to the same device as the model - Required for the calculation
+    metrics = [metric.to(sample_y.device) for metric in metrics]
+
+    ## Create the column names - One column for each metric for training and validation
+    train_columns = [f"Train {metric.__class__.__name__}" for metric in metrics]
+    validation_columns = [f"Val {metric.__class__.__name__}" for metric in metrics]
+
+    ## Create the table
+    table = Table(title="Performance Metrics")
+    for column in train_columns:
+        table.add_column(column, style="cyan", justify="right")
+    for column in validation_columns:
+        table.add_column(column, style="magenta", justify="right")
+
+    ## Calculate the performance metrics for each output column
+    for column in y_indices:
+        table_row = []
+        for train_metric in metrics:
+            table_row.append(_calculate_performance(train_loader, model, train_metric, y_scaler))
+        if validation_loader is not None:
+            for val_metric in metrics:
+                table_row.append(_calculate_performance(validation_loader, model, val_metric, y_scaler))
+        else:
+            table_row += ["N/A"] * len(metrics)  # Padding when no validation set is present
+        table.add_row(*[f"{performance:.4f}" for performance in table_row])
+
+    console = Console(record=True)
+    console.print(table)
+    return console
 
 
 def _calculate_precision(y_true: np.ndarray, y_pred: np.ndarray, threshold: float = 0.5) -> float:
@@ -71,7 +182,7 @@ def create_filtered_error_stats_table(
         y_scaler (StandardScaler): Scaler object used to scale the output features
         model (torch.nn.Module): PyTorch model object
         filter_column (Optional[str]): Column name to be used for filtering the data
-        performance_metric (List[PerformanceMetric]): Performance metrics to be used for error calculation. 
+        performance_metric (List[PerformanceMetric]): Performance metrics to be used for error calculation.
                                                       Default: ["mae", "mae_std"]
         validation_method (Optional[ValidationMethod]): Validation method to be used for error calculation
 
@@ -82,8 +193,8 @@ def create_filtered_error_stats_table(
     assert filter_column in data.columns, f"Filter column {filter_column} not found in data"
 
     if performance_metric is None:
-        performance_metric = ["mae", "mae_std"]     # Default Performance Metrics
-    
+        performance_metric = ["mae", "mae_std"]  # Default Performance Metrics
+
     unique_values = data[filter_column].unique()
     unique_values.sort()
 
