@@ -30,12 +30,13 @@ from inverse_modelling_tfo.features.data_transformations import (
 # Data Setup
 # ==========================================================================================
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio_interp.pkl"
+# out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "wide_intensity.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_3wv.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "logI2_by_I1.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
 
-in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl")
+in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2_ext.pkl")
 config_src = in_src.with_suffix(".json")
 
 fconc_rounding = 2
@@ -119,7 +120,7 @@ config = {
     "labels": fb1.get_label_names(),
     "features": fb1.get_feature_names(),
     "feature_builder_txt": str(fb1),
-    "preprocessing_description": "Detector Normalization -> Long to Wide -> Row Combination -> Calculate log(I2)/log(I1)",
+    "preprocessing_description": "Detector Normalization -> Long to Wide",
     "comments": "Most vanilla data pipeline/feature extraction. No normalization, no feature engineering. Just the raw data reshaped for the model.",
     "data used": "/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl",
 }

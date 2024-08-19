@@ -2,7 +2,7 @@
 Dataclasses for training/testing models using our simulation data
 """
 
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -133,34 +133,88 @@ class DifferentialCombinationDataset(Dataset):
         )
 
 
+class RowCombinationDataset(Dataset):
+    """
+    Given a list of data_groups, randomly choses two rows from each group and concatenates them to form a single data
+    point.
+    """
+
+    def __init__(self, data_groups: List[torch.Tensor]):
+        """
+        Args:
+            data_groups (List[torch.Tensor]): List of torch tensors where each tensor is a group of data
+            total_length (int): Total number of samples to generate - batch size x number of batches. Since data is
+                                generated on the fly, this is the total number of random samples to generate
+        """
+        # Sanity checks - All groups should have a length of atleast 2
+        assert all([x.shape[0] >= 2 for x in data_groups]), "All groups should have atleast 2 data points"
+        self.data_groups = data_groups
+        self.group_lengths = [x.shape[0] for x in data_groups]
+        self.group_count = len(data_groups)
+        self.choice_array = self._create_choise_array()
+
+    def __len__(self):
+        return len(self.data_groups)
+
+    def _create_choise_array(self):
+        choice_array = np.zeros((self.group_count, 2), dtype=int)
+        for i in range(self.group_count):
+            choice_array[i] = np.random.choice(self.data_groups[i].shape[0], 2, replace=False)
+        return choice_array
+
+    def __getitem__(self, index):
+        ## Hack to make a shuffle at each epoch
+        if index == self.__len__() - 1:
+            self.choice_array = self._create_choise_array()
+
+        ## Pick A Group
+        group = self.data_groups[index]
+        ## Pick Two non-similar rows
+        row1_index, row2_index = self.choice_array[index]
+        x_data = torch.cat([group[row1_index], group[row2_index]])
+        return x_data,      # Return a tuple to make it compatible with the DataLoader
+
+
 class SignDetectionDataset(Dataset):
     """
-    DataLoader that generates random combinations of two rows in the table. Pass in the different probably groups of
+    DataLoader that generates random combinations of two rows in the table. Pass in the different groups of data
     to sample from. For each data point, this chooses a group and samples two random rows from that group! The target
     is 1 if the first row's y data is greater than the second row's y_data, else 0.
     """
 
-    def __init__(self, data_groups_x: List[torch.Tensor], data_groups_y: List[torch.Tensor]):
+    def __init__(self, data_groups_x: List[torch.Tensor], data_groups_y: List[torch.Tensor], total_length: int):
+        """
+        Args:
+            data_groups_x (List[torch.Tensor]): List of torch tensors where each tensor is a group of x data
+            data_groups_y (List[torch.Tensor]): List of torch tensors where each tensor is a group of y data
+            total_length (int): Total number of samples to generate - batch size x number of batches. Since data is
+                                generated on the fly, this is the total number of random samples to generate
+
+        """
         # Sanity checks - All groups should have a length of atleast 2
         assert all([x.shape[0] >= 2 for x in data_groups_x]), "All groups should have atleast 2 data points"
-        assert all(
-            [x.shape[0] == y.shape[0] for x, y in zip(data_groups_x, data_groups_y)]
-        ), "X and Y should have same length"
+        assert all([x.shape[0] == y.shape[0] for x, y in zip(data_groups_x, data_groups_y)]), "X & Y lengths mismatch"
 
         self.data_groups_x = data_groups_x
         self.data_groups_y = data_groups_y
+        self.group_lengths = [x.shape[0] for x in data_groups_x]
+        self.group_choice_probabilities = np.array(self.group_lengths, dtype=float) / np.sum(self.group_lengths)
+        self.total_length = total_length
+        self.group_count = len(data_groups_x)
+
+        # Create the random indices list - This will be used to choose a data group
+        self.randomized_indices_list = np.random.choice(
+            np.arange(len(data_groups_x)), total_length, replace=True, p=self.group_choice_probabilities
+        )  # Give higher probability to groups with more data
 
     def __len__(self):
-        return len(self.data_groups_x)
+        return self.total_length
 
     def __getitem__(self, index):
-        ## Pick two random rows from the group
-        group_x = self.data_groups_x[index]
-        group_y = self.data_groups_y[index]
-        row1_index = torch.randint(0, group_x.shape[0], (1,)).item()
-        row2_index = torch.randint(0, group_x.shape[0], (1,)).item()
-        while row1_index == row2_index:
-            row2_index = torch.randint(0, group_x.shape[0], (1,)).item()
+        chosen_group = self.randomized_indices_list[index]
+        group_x = self.data_groups_x[chosen_group]
+        group_y = self.data_groups_y[chosen_group]
+        row1_index, row2_index = np.random.choice(group_x.shape[0], 2, replace=False)
         x_data = torch.cat([group_x[row1_index], group_x[row2_index]])
 
         ## Generate Label

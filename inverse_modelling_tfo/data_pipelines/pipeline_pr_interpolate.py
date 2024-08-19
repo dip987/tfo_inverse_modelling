@@ -23,16 +23,16 @@ from inverse_modelling_tfo.features.build_features import (
     ConcatenateFeatureBuilder,
 )
 from inverse_modelling_tfo.features.data_transformations import LongToWideIntensityTransformation
-from inverse_modelling_tfo.data_pipelines.stable_derivative import interpolate_pr
+from inverse_modelling_tfo.data_pipelines.stable_derivative import interpolate_pr, interpolate_pr2
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio_interp_sd2.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio_interp_sd3_3wv(alt).pkl"
 
 config_dest = out_dest.with_suffix(".json")
 
 # in_src = Path(r"/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl")
-in_src = Path(r"/home/rraiyan/personal_projects/tfo_inverse_modelling/data/processed_data/I1_and_I2.pkl")
+in_src = Path(r"/home/rraiyan/personal_projects/tfo_inverse_modelling/data/processed_data/I1_and_I2_3wv.pkl")
 config_src = in_src.with_suffix(".json")
 
 data = pd.read_pickle(in_src)
@@ -62,25 +62,27 @@ fb1 = TwoColumnOperationFeatureBuilder(
 data = fb1(data)
 
 # Interpolate PR
-ma_filter_len = 2
+ma_filter_len = 3
 derivative_threshold = 1e-4
 
-wv1_columns = [col for col in fb1.get_feature_names() if "_1.0_" in col]
-wv2_columns = [col for col in fb1.get_feature_names() if "_2.0_" in col]
+
+all_wv_cols = []
+for wv_str in ["_1.0_", "_2.0_", "_3.0_", "_4.0_"]:
+    new_wv_cols = [col for col in fb1.get_feature_names() if wv_str in col]
+    if new_wv_cols:
+        all_wv_cols.append(new_wv_cols)
 
 
 def apply_interpolation(x) -> np.ndarray:
-    return interpolate_pr(
+    return interpolate_pr2(
         x,
         derivative_threshold,
         ma_filter_len,
     )
 
 
-t1 = np.apply_along_axis(apply_interpolation, 1, data[wv1_columns].values)
-t2 = np.apply_along_axis(apply_interpolation, 1, data[wv2_columns].values)
-data[wv1_columns] = t1
-data[wv2_columns] = t2
+for wv_cols in all_wv_cols:
+    data[wv_cols] = np.apply_along_axis(apply_interpolation, 1, data[wv_cols].values)
 
 # Create Config file
 # ==========================================================================================
@@ -90,7 +92,7 @@ config = {
     "features": fb1.get_feature_names(),
     "feature_builder_txt": str(fb1),
     "preprocessing_description": "Detector Normalization -> Long to Wide -> Row Combination -> Calculate I2/I1 -> Interpolate PR",
-    "comments": "Stable derviative method used to interpolate PR (Using a MA filter of length 2)",
+    "comments": "Has 3 Wavelength data. Stable derviative method used to interpolate PR (Using a MA filter of length 2)",
     "data used": "/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl",
 }
 
