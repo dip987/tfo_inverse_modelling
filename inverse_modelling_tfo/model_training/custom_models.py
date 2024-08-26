@@ -674,3 +674,46 @@ class SkipConnect(nn.Module):
         left_output = self.left_network(non_skip_data)
         x = torch.cat([left_output, skip_data], dim=1)
         return self.right_network(x)
+
+
+class CustomSiam(nn.Module):
+    """
+    Custom Implementation of Meta's SamSiam Model
+    """
+    def __init__(self, encoder_nodes: List[int]):
+        """
+        Experimmental Implementation of SamSiam. Make sure the projector nodes has the same in/out nodes as
+        encoder_nodes[-1]. Otherwise the model will not work.
+        Example:
+        -------
+        model = CustomSiam([20, 10, 5])
+
+        Args:
+            encoder_nodes (List[int]): List of nodes for the encoder. The last node should be the output dimension. The
+                                        very last node dictates the projector dimensions. Given the last node is d, the
+                                        projector always has the following node structure [d, d//2, d]
+
+        """
+        super(CustomSiam, self).__init__()
+
+        self.input_dim = encoder_nodes[0]
+
+        # We need to make an encoder that ends in BatchNorm and not a Linear layer
+        dummy_encoder_nodes = encoder_nodes + [1]  # Add a dummy Linear layer to the encoder - remove later
+        self.encoder = PerceptronBD(dummy_encoder_nodes)
+        self.encoder.layers = self.encoder.layers[:-2]  # Remove the last flatten and dummy Linear layer
+        self.encoder.layers.append(nn.BatchNorm1d(encoder_nodes[-1], affine=False))  # Add a BatchNorm layer
+        # self.encoder.layers[-1].bias.requires_grad = False  # Turn off the bias for the BatchNorm layer(SamSiam github)
+        self.encoder.model = nn.Sequential(*self.encoder.layers)  # Reassign the model to the new layers
+        projector_nodes = [encoder_nodes[-1], encoder_nodes[-1] // 2, encoder_nodes[-1]]
+        self.projector = PerceptronBD(projector_nodes)
+
+    def forward(self, x):
+        # Split x into two parts
+        x1, x2 = x.chunk(2, dim=1)
+        z1 = self.encoder(x1)
+        z2 = self.encoder(x2)
+        p1 = self.projector(z1)
+        p2 = self.projector(z2)
+
+        return torch.cat([p1, p2, z1.detach(), z2.detach()], dim=1)
