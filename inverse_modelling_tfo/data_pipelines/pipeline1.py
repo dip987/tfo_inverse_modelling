@@ -31,7 +31,7 @@ from inverse_modelling_tfo.features.data_transformations import (
 # ==========================================================================================
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "wide_intensity.pkl"
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_3wv.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_5wv.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "logI2_by_I1.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")
@@ -122,7 +122,7 @@ config = {
     "feature_builder_txt": str(fb1),
     "preprocessing_description": "Detector Normalization -> Long to Wide",
     "comments": "Most vanilla data pipeline/feature extraction. No normalization, no feature engineering. Just the raw data reshaped for the model.",
-    "data used": "/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2.pkl",
+    "data used": "/home/rraiyan/simulations/tfo_sim/data/compiled_intensity/pencil2_ext.pkl",
 }
 
 # Save data and config

@@ -455,6 +455,36 @@ class SplitChannelCNN(nn.Module):
         cnn_dropouts: Optional[List[float]] = None,
         fc_dropouts: Optional[List[float]] = None,
     ) -> None:
+        """
+        Args:
+            complete_input_length (int): Length of the input features in 1D (before splitting)
+            split_count (int): Number of splits to divide the input into
+            cnn_out_channels (List[int]): Total output channel counts for each node in the CNN. Each element must be
+                                            divisible by split_count. The padding size is auto-calculated to maintain
+                                            the output size.
+            cnn_kernel_sizes (List[int]): Kernel sizes for each of the CNN layers. Must be the same length as 
+                                            cnn_out_channels
+            fc_output_node_counts (List[int]): Output Node counts for the fully connected layers. The first element is 
+                                            auto-calculated based on the output of the CNN layers
+            cnn_paddings (Optional[List[int]]): Padding for each of the CNN layers. Defaults to None. If set to None,
+                                            the padding is set to 0 for all layers. If set to a list, the length should be
+                                            the same as the layer count. 
+            cnn_strides (Optional[List[int]]): Strides for each of the CNN layers Defaults to None / stride = 1. If set
+                                            to None, the stride is set to 1 for all layers. If set to a list, the length                                
+                                            should be the same as the number of layers. Defaults to None / stride = 1
+            cnn_dialations (Optional[List[int]]): Dialations for each of the CNN layers. Defaults to None / dialation = 1
+                                            If set to None, the dialation is set to 1 for all layers. If set to a list, 
+                                            the length should be the same as the number of layers. Defaults to None 
+                                            / dialation = 1.
+            cnn_dropouts (Optional[List[float]]): Dropout rates for each of the CNN layers. Set this to None to avoid
+                                            Dropout Layers. (Analogous to setting dropout values to 0). If provided, The   
+                                            length must be the same length as cnn_out_channels. Defaults to None
+            fc_dropouts (Optional[List[float]]): Dropout rates for the fully connected layers. The length must be the
+                                        same as the length of fc_node_counts. Set this to None to avoid Dropout Layers. 
+                                        (Analogous to setting dropout values to 0). Defaults to None
+
+        
+        """
         # Sanity check
         layer_count = len(cnn_out_channels)
         assert complete_input_length % split_count == 0, "complete_input_length has to be divisible by split_count"
@@ -717,3 +747,4 @@ class CustomSiam(nn.Module):
         p2 = self.projector(z2)
 
         return torch.cat([p1, p2, z1.detach(), z2.detach()], dim=1)
+
