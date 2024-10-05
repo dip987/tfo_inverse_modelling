@@ -31,7 +31,7 @@ from inverse_modelling_tfo.features.data_transformations import (
 # ==========================================================================================
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "wide_intensity.pkl"
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_5wv.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "I1_and_I2_6wv.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "logI2_by_I1.pkl"
 # out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "processed1_max_long_range.pkl"
 config_dest = out_dest.with_suffix(".json")

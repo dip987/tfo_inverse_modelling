@@ -19,7 +19,8 @@ from inverse_modelling_tfo.misc.misc_training import set_seed
 # Set my GPU
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
-FILE_NAME = "pulsation_ratio_interp_sd3_5wv"  # EPR input - too lazy to change the name
+# FILE_NAME = "pulsation_ratio_interp_sd3_6wv"  # EPR input - too lazy to change the name
+FILE_NAME = "pulsation_ratio_interp_sd2_3wv(alt)" 
 # FILE_NAME = "pulsation_ratio_interp_sd2_3wv(alt)"  # EPR input - too lazy to change the name
 # Load data
 PROJECT_BASE_PATH = Path(__file__).resolve().parent.parent.parent
@@ -33,13 +34,20 @@ with open(CONFIG_PATH, "r", encoding="utf8") as f:
 labels = config["labels"]
 features = config["features"]
 
-wavelength_to_feature_map = {  # Which features correspond to which wavelengths - (forgot to sort before :(  )
-    910.0: features[:20],
-    690.0: features[20:40],
-    850.0: features[40:60],
-    735.0: features[60:80],
-    810.0: features[80:100],
+# wavelength_to_feature_map = {  # Which features correspond to which wavelengths - (forgot to sort before :(  )
+#     910.0: features[:20],
+#     690.0: features[20:40],
+#     850.0: features[40:60],
+#     735.0: features[60:80],
+#     810.0: features[80:100],
+#     780.0: features[100:120],
+# }
+wavelength_to_feature_map = {   # Settins for the older file
+    735.0: features[:20],
+    850.0: features[20:40],
+    810.0: features[40:60],
 }
+
 wavelengths_to_use = [850.0, 735.0, 810.0]
 features = [feature for wavelength in wavelengths_to_use for feature in wavelength_to_feature_map[wavelength]]
 
@@ -87,14 +95,15 @@ torchinfo.summary(model, input_size=(32, IN_FEATURES))  # Assuming a batch size 
 
 trainer = ModelTrainer(model, dataloader_gen, validation_method, criterion, verbose=True)
 trainer.set_optimizer(Adam, {"lr": 1e-3, "weight_decay": 1e-4})
-trainer.set_batch_size(128)
-trainer.run(49)  # Set Epochs Here
+# trainer.set_batch_size(128)
+trainer.set_batch_size(512)
+trainer.run(41)  # Set Epochs Here
 print("Training Done")
 print("Error Table")
 criterion.print_table()
 
 # ## Save Model Code
-model_name = "random_split_3wv_60_features"
+model_name = "random_split_3wv_60_features_alt"
 print(f"Saving Model & Scalers as {model_name}")
 torch.save(model.state_dict(), str(PROJECT_BASE_PATH / "models" / f"{model_name}.pt"))
 # Save the Scalers for Later Use

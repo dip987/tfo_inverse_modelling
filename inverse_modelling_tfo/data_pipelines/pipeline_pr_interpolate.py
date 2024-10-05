@@ -1,8 +1,4 @@
 """
-Produces Interpolated Pulsation Ratio(I2/I1) using stable derivatives
-"""
-
-"""
 Pipe line to process simulation data and extract features for the inverse modelling task, and save them for future use.
 The purpose is to cut down on the time it takes to process the data and extract features.
 """
@@ -26,12 +22,12 @@ from inverse_modelling_tfo.data_pipelines.stable_derivative import interpolate_p
 
 # Data Setup
 # ==========================================================================================
-out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio_interp_sd3_5wv.pkl"
+out_dest = Path(__file__).parent.parent.parent / "data" / "processed_data" / "pulsation_ratio_interp_sd3_6wv.pkl"
 
 config_dest = out_dest.with_suffix(".json")
 
 # The in_src should be the output of the previous pipeline (pipeline1.py)
-in_src = Path(r"/home/rraiyan/personal_projects/tfo_inverse_modelling/data/processed_data/I1_and_I2_5wv.pkl")
+in_src = Path(r"/home/rraiyan/personal_projects/tfo_inverse_modelling/data/processed_data/I1_and_I2_6wv.pkl")
 config_src = in_src.with_suffix(".json")
 
 data = pd.read_pickle(in_src)
